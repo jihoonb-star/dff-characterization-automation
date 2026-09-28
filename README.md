@@ -6,6 +6,15 @@ This project automates DFF setup/hold timing characterization across PVT and Mon
 
 To reduce post-processing overhead, the framework uses a single-pass Maestro RDB caching architecture instead of repeatedly traversing the result database for every condition and metric.
 
+## Highlights
+
+- Automated DFF Setup/Hold characterization across PVT and Monte Carlo conditions
+- End-to-end Cadence OCEAN/SKILL → CSV → Python → Excel workflow
+- Single-pass Maestro RDB caching architecture
+- **124.89× faster** PVT post-processing
+- **105.38× faster** Monte Carlo post-processing
+- More than **99% runtime reduction** while preserving identical result counts and checksums
+
 ---
 
 ## Overview
