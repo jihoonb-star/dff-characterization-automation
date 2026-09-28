@@ -23,32 +23,26 @@ DFF characterization requires repeated simulation and result extraction across m
 
 The automated flow implemented in this project is:
 
-```text
-Cadence Virtuoso ADE / Maestro
-            |
-            v
-      OCEAN Automation
-            |
-            v
-       Spectre Simulation
-            |
-            v
-       Maestro RDB
-            |
-            v
-   Single-Pass RDB Scan
-            |
-            v
-     In-Memory Cache
-            |
-            v
-        CSV Export
-            |
-            v
- Python Post-Processing
-            |
-            v
- Excel Characterization Report
+```mermaid
+flowchart TD
+    A[Cadence Virtuoso ADE / Maestro]
+    B[OCEAN Automation]
+    C[Spectre Simulation]
+    D[Maestro RDB]
+    E[Single-Pass RDB Scan]
+    F[In-Memory Cache]
+    G[CSV Export]
+    H[Python Post-Processing]
+    I[Excel Characterization Report]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
 ```
 
 The framework supports:
