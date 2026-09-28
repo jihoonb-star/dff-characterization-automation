@@ -1,0 +1,1611 @@
+;==============================================================================
+; Monte Carlo Post-Processing Benchmark - Fresh Simulation
+;
+; Purpose:
+;   1. Run a fresh Monte Carlo simulation using the same configuration as the
+;      normal Monte characterization flow.
+;   2. Read the newly generated Maestro history.
+;   3. Compare Legacy repeated-RDB traversal against One-Pass caching using
+;      that exact same RDB.
+;
+; Benchmark timing:
+;   - Simulation time is reported separately.
+;   - Speedup compares post-processing algorithms only.
+;   - CSV / Python / Excel generation is excluded from the comparison.
+;==============================================================================
+
+;==============================================================================
+; Load Project Configuration
+;==============================================================================
+
+DFF_CHAR_ROOT = getShellEnvVar(
+    "DFF_CHAR_ROOT"
+)
+
+unless(
+    DFF_CHAR_ROOT
+
+    error(
+        "ERROR: DFF_CHAR_ROOT environment variable is not set.\n"
+    )
+)
+
+load(
+    strcat(
+        DFF_CHAR_ROOT
+        "/config/config.il"
+    )
+)
+
+
+;==============================================================================
+; Set Maestro Mode
+;==============================================================================
+
+ocnSetXLMode(
+    "assembler"
+)
+
+ocnxlProjectDir(
+    DFF_PROJECT_DIR
+)
+
+ocnxlTargetCellView(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_MAESTRO_VIEW
+    ?mode "r"
+)
+
+ocnxlResultsLocation(
+    ""
+)
+
+ocnxlSimResultsLocation(
+    ""
+)
+
+ocnxlMaxJobFail(
+    20
+)
+
+
+;==============================================================================
+; Tests Setup
+;==============================================================================
+
+
+;------------------------------------------------------------------------------
+; Setup-Time Characterization Test
+;------------------------------------------------------------------------------
+
+ocnxlBeginTest(
+    DFF_SETUP_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_SETUP_TEST_HOLD
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_SETUP_SWEEP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity   "None"
+    'noiseSeverity "None"
+    'spSeverity   "None"
+    'acSeverity   "None"
+    'dcOpSeverity "None"
+    'dcSeverity   "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+temp(
+    27
+)
+
+; User-defined CLK-to-Q expression.
+; Replace only the expression if your DUT uses different signal names.
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name DFF_CLK_TO_Q_OUTPUT
+    ?plot t
+    ?save t
+)
+
+ocnxlEndTest()
+
+
+;------------------------------------------------------------------------------
+; Hold-Time Characterization Test
+;------------------------------------------------------------------------------
+
+ocnxlBeginTest(
+    DFF_HOLD_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_HOLD_SWEEP
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_HOLD_TEST_SETUP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity   "None"
+    'noiseSeverity "None"
+    'spSeverity   "None"
+    'acSeverity   "None"
+    'dcOpSeverity "None"
+    'dcSeverity   "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+temp(
+    27
+)
+
+; User-defined CLK-to-Q expression.
+; Replace only the expression if your DUT uses different signal names.
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name DFF_CLK_TO_Q_OUTPUT
+    ?plot t
+    ?save t
+)
+
+ocnxlEndTest()
+
+
+;------------------------------------------------------------------------------
+; ETC Characterization Test
+;------------------------------------------------------------------------------
+
+ocnxlBeginTest(
+    DFF_ETC_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_ETC_HOLD
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_ETC_SETUP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity   "None"
+    'noiseSeverity "None"
+    'spSeverity   "None"
+    'acSeverity   "None"
+    'dcOpSeverity "None"
+    'dcSeverity   "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+
+;==============================================================================
+; User-Defined ETC Outputs
+;==============================================================================
+
+; Paste ADE-generated save/output statements in this section.
+;
+; Scalar expression outputs are automatically discovered and exported.
+; Waveform-valued expressions are intentionally omitted from this automated
+; Monte Carlo statistics flow.
+;
+; ETC scalar values are exported exactly as evaluated by ADE.
+
+save(
+    'i
+    "/V4/MINUS"
+)
+
+temp(
+    27
+)
+
+
+;------------------------------------------------------------------------------
+; Scalar Outputs
+;------------------------------------------------------------------------------
+
+; Only scalar expressions are registered for Monte Carlo statistics.
+; Waveform-valued expressions are intentionally omitted to avoid unnecessary
+; RDB/PSF waveform loading during post-processing.
+
+
+ocnxlOutputExpr(
+    "((integ(IT(\"/V4/MINUS\") 2.5e-07 7.5e-07 \" \") / 1e-06) * VAR(\"VDD\"))"
+    ?name "POWER_CONSUMPTION"
+    ?plot t
+)
+
+ocnxlOutputTerminal(
+    "/V4/MINUS"
+    ?save t
+)
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name DFF_CLK_TO_Q_OUTPUT
+    ?plot t
+)
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (0.9 * VAR(\"VDD\")) 1 \"rising\" nil nil nil) - cross(VT(\"/Q\") (0.1 * VAR(\"VDD\")) 1 \"rising\" nil nil nil))"
+    ?name "OUTPUT_RISE_TIME"
+    ?plot t
+)
+
+ocnxlEndTest()
+
+
+;==============================================================================
+; Corners Setup
+;==============================================================================
+
+ocnxlCorner(
+    "CORNER"
+    `(
+        (
+            "variable"
+            "temperature"
+            ,DFF_PVT_TEMPERATURES
+        )
+
+        (
+            "variable"
+            "VDD"
+            ,DFF_PVT_VDD
+        )
+
+        (
+            "model"
+            ,DFF_MODEL_FILE
+            ?section
+            ,DFF_PVT_MODEL_SECTIONS
+        )
+
+        (
+            "model"
+            ,DFF_MODEL_FILE
+            ?enabled nil
+            ?section
+            ,DFF_PRE_SIMU_SECTION
+        )
+
+        (
+            "modelGroup"
+            ""
+        )
+    )
+)
+
+
+ocnxlCorner(
+    "MONTE"
+    `(
+        (
+            "variable"
+            "temperature"
+            ,DFF_MONTE_TEMPERATURES
+        )
+
+        (
+            "variable"
+            "VDD"
+            ,DFF_MONTE_VDD
+        )
+
+        (
+            "model"
+            ,DFF_MODEL_FILE
+            ?section
+            ,DFF_MONTE_MODEL_SECTION
+        )
+
+        (
+            "model"
+            ,DFF_MODEL_FILE
+            ?enabled nil
+            ?section
+            ,DFF_PRE_SIMU_SECTION
+        )
+
+        (
+            "modelGroup"
+            ""
+        )
+    )
+)
+
+
+;==============================================================================
+; Checks and Asserts
+;==============================================================================
+
+ocnxlPutChecksAsserts(
+    ?netlist nil
+)
+
+
+;==============================================================================
+; Job Setup
+;==============================================================================
+
+ocnxlJobSetup(
+    '(
+        "autoresume" "0"
+        "blockemail" "1"
+        "configuretimeout" "300"
+        "defaultcpuvalue" "1"
+        "defaultmemoryvalue" "1000"
+        "distributionmethod" "Local"
+        "jobruntype" "ICRP"
+        "estimatememoryvalue" ""
+        "estimationsimulationmode" "0"
+        "lingertimeout" "300"
+        "maxjobs" "16"
+        "name" "Maestro Default"
+        "preemptivestart" "1"
+        "providecpuandmemorydata" "1"
+        "reconfigureimmediately" "1"
+        "runpointsvalue" "5"
+        "runtimeout" "-1"
+        "scaleestimatedbycpu" "100"
+        "scaleestimatedbymemory" "100"
+        "showerrorwhenretrying" "1"
+        "showoutputlogerror" "0"
+        "startmaxjobsimmed" "1"
+        "starttimeout" "300"
+        "usesameprocess" "1"
+        "warndisklow" "0"
+        "warnthresholdvalue" "100"
+    )
+)
+
+
+;==============================================================================
+; Disabled Items
+;==============================================================================
+
+; MONTE is enabled when the corner is created above.
+; Disable only the normal PVT corner for this Monte Carlo run.
+
+ocnxlDisableCorner(
+    "CORNER"
+)
+
+
+;==============================================================================
+; Monte Carlo Options
+;==============================================================================
+
+ocnxlMonteCarloOptions(
+    ?mcNumPoints DFF_MONTE_POINTS
+    ?mcYieldTarget "99.865"
+    ?mcNumBins ""
+    ?samplingMode "lds"
+    ?wcdMinYieldSigma "3.0"
+    ?dumpParamMode "yes"
+    ?mcYieldAlphaLimit "0.05"
+    ?reliabilitymode "singlestress"
+    ?mcStartingRunNumber "1"
+    ?mcSigmaTarget "3"
+    ?monteCarloSeed DFF_MONTE_SEED
+    ?sssNumPoints "7000"
+    ?highYieldExpectedYieldSigma "3"
+    ?mcMethod "all"
+    ?wcdInitialPoints "200"
+    ?wcdMaxIterations "10"
+    ?saveAllPlots "0"
+    ?highYieldUseHistoryMC "0"
+    ?saveProcess "1"
+    ?wcdAutoNumPoints "1"
+    ?mcStopEarly "0"
+    ?highYieldCreateCorners "0"
+    ?saveMismatch "1"
+    ?wcdSkipLowYieldSpecs "1"
+    ?wcdEnableVarReduction "1"
+)
+
+
+;==============================================================================
+; Run Monte Carlo
+;==============================================================================
+
+printf("\n")
+printf("========================================================\n")
+printf(" Running Fresh Monte Carlo Simulation for Benchmark\n")
+printf("========================================================\n")
+
+simulationStartTime = getCurrentTime()
+
+ocnxlRun(
+    ?mode 'monteCarlo
+    ?nominalCornerEnabled nil
+    ?allCornersEnabled t
+    ?allSweepsEnabled t
+)
+
+simulationEndTime = getCurrentTime()
+
+simulationElapsedSec = compareTime(
+    simulationEndTime
+    simulationStartTime
+)
+
+printf(
+    " Monte Carlo Simulation Time : %L sec\n"
+    simulationElapsedSec
+)
+
+
+;==============================================================================
+; Validate Maestro History
+;==============================================================================
+
+currentHistory =
+    ocnxlGetCurrentHistory()
+
+unless(
+    currentHistory
+
+    error(
+        "ERROR: Monte Carlo run did not create a Maestro history. "
+        "Restart Virtuoso and run this script from a clean session.\n"
+    )
+)
+
+
+;==============================================================================
+; Output Summary
+;==============================================================================
+
+ocnxlOutputSummary(
+    ?yieldSummary t
+    ?exprSummary nil
+    ?specSummary nil
+    ?detailed nil
+)
+
+
+;==============================================================================
+; Read Monte Carlo RDB
+;==============================================================================
+
+rdbReadStartTime = getCurrentTime()
+
+rdb =
+    axlReadHistoryResDB(
+        currentHistory
+        ?session ocnxlGetSession()
+    )
+
+rdbReadEndTime = getCurrentTime()
+
+rdbReadElapsedSec = compareTime(
+    rdbReadEndTime
+    rdbReadStartTime
+)
+
+unless(
+    rdb
+
+    error(
+        "ERROR: Failed to read the newly generated Monte Carlo history: %s\n"
+        currentHistory
+    )
+)
+
+;==============================================================================
+; Shared Helpers
+;==============================================================================
+
+procedure(
+    monteBenchmarkMakeKey(seqVal tempVal vddVal)
+    sprintf(nil "%L|%L|%L" seqVal tempVal vddVal)
+)
+
+
+procedure(
+    monteBenchmarkCalcTiming(dataList)
+
+    let(
+        (sortedData nominalTcq threshold timingValue prevX prevY x y)
+
+        nominalTcq = nil
+        timingValue = nil
+
+        when(
+            dataList
+
+            sortedData = sortcar(dataList 'lessp)
+
+            foreach(
+                item sortedData
+                x = car(item)
+                y = cadr(item)
+
+                when(
+                    abs(x - DFF_TIMING_REFERENCE) < 1e-15
+                    nominalTcq = y
+                )
+            )
+
+            when(
+                nominalTcq
+
+                threshold = nominalTcq * DFF_TIMING_DEGRADATION
+                prevX = nil
+                prevY = nil
+
+                foreach(
+                    item sortedData
+                    x = car(item)
+                    y = cadr(item)
+
+                    when(
+                        timingValue == nil &&
+                        prevY != nil &&
+                        prevY >= threshold &&
+                        y <= threshold
+
+                        if(
+                            y == prevY
+                            then
+                                timingValue = x
+                            else
+                                timingValue = prevX +
+                                    (threshold - prevY) *
+                                    (x - prevX) /
+                                    (y - prevY)
+                        )
+                    )
+
+                    prevX = x
+                    prevY = y
+                )
+            )
+        )
+
+        timingValue
+    )
+)
+
+
+procedure(
+    monteBenchmarkGetEtc(dataList metricWanted)
+
+    let((result)
+        result = nil
+
+        foreach(
+            item dataList
+            when(
+                car(item) == metricWanted
+                result = cadr(item)
+            )
+        )
+
+        result
+    )
+)
+
+
+;==============================================================================
+; One-Pass Benchmark
+;==============================================================================
+
+procedure(
+    benchmarkOnePassMonte(rdb)
+
+    let(
+        (
+            setupTable holdTable etcTable
+            sequenceList tempList vddList etcMetricList
+            seqVal tempVal vddVal tsetupVal tholdVal outputVal key
+            seqWanted tempWanted vddWanted metricWanted
+            setupResult holdResult etcResult
+            setupCount holdCount etcCount checksum
+        )
+
+        setupTable = makeTable("benchmarkMonteSetup" nil)
+        holdTable = makeTable("benchmarkMonteHold" nil)
+        etcTable = makeTable("benchmarkMonteEtc" nil)
+
+        sequenceList = nil
+        tempList = nil
+        vddList = nil
+        etcMetricList = nil
+
+        setupCount = 0
+        holdCount = 0
+        etcCount = 0
+        checksum = 0.0
+
+        ; One complete RDB traversal.
+        foreach(
+            point rdb->points()
+
+            foreach(
+                corner point->corners()
+
+                seqVal = nil
+                tempVal = nil
+                vddVal = nil
+                tsetupVal = nil
+                tholdVal = nil
+
+                foreach(
+                    param corner->params()
+
+                    when(
+                        param->name == "monteCarlo::param::sequence"
+                        seqVal = param->value
+                    )
+
+                    when(
+                        param->name == "temperature"
+                        tempVal = param->value
+                    )
+
+                    when(
+                        param->name == "VDD"
+                        vddVal = param->value
+                    )
+
+                    when(
+                        param->name == DFF_SETUP_VARIABLE
+                        tsetupVal = param->value
+                    )
+
+                    when(
+                        param->name == DFF_HOLD_VARIABLE
+                        tholdVal = param->value
+                    )
+                )
+
+                when(
+                    seqVal != nil && tempVal != nil && vddVal != nil
+
+                    key = monteBenchmarkMakeKey(seqVal tempVal vddVal)
+
+                    unless(member(seqVal sequenceList)
+                        sequenceList = cons(seqVal sequenceList)
+                    )
+
+                    unless(member(tempVal tempList)
+                        tempList = cons(tempVal tempList)
+                    )
+
+                    unless(member(vddVal vddList)
+                        vddList = cons(vddVal vddList)
+                    )
+
+                    foreach(
+                        test corner->tests()
+
+                        when(
+                            test->name == DFF_SETUP_TEST_NAME
+
+                            foreach(
+                                output test->outputs()
+
+                                when(
+                                    output->name == DFF_CLK_TO_Q_OUTPUT
+                                    outputVal = output->value
+
+                                    when(
+                                        numberp(tsetupVal) && numberp(outputVal)
+                                        setupTable[key] = cons(
+                                            list(tsetupVal outputVal)
+                                            setupTable[key]
+                                        )
+                                    )
+                                )
+                            )
+                        )
+
+                        when(
+                            test->name == DFF_HOLD_TEST_NAME
+
+                            foreach(
+                                output test->outputs()
+
+                                when(
+                                    output->name == DFF_CLK_TO_Q_OUTPUT
+                                    outputVal = output->value
+
+                                    when(
+                                        numberp(tholdVal) && numberp(outputVal)
+                                        holdTable[key] = cons(
+                                            list(tholdVal outputVal)
+                                            holdTable[key]
+                                        )
+                                    )
+                                )
+                            )
+                        )
+
+                        when(
+                            test->name == DFF_ETC_TEST_NAME
+
+                            foreach(
+                                output test->outputs()
+
+                                when(
+                                    output->type == 'expr && output->name
+                                    outputVal = output->value
+
+                                    when(
+                                        numberp(outputVal)
+
+                                        unless(member(output->name etcMetricList)
+                                            etcMetricList = cons(
+                                                output->name
+                                                etcMetricList
+                                            )
+                                        )
+
+                                        etcTable[key] = cons(
+                                            list(output->name outputVal)
+                                            etcTable[key]
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        sequenceList = reverse(sequenceList)
+        tempList = reverse(tempList)
+        vddList = reverse(vddList)
+        etcMetricList = reverse(etcMetricList)
+
+        ; Calculate every cached output.
+        foreach(
+            seqWanted sequenceList
+
+            foreach(
+                tempWanted tempList
+
+                foreach(
+                    vddWanted vddList
+
+                    key = monteBenchmarkMakeKey(
+                        seqWanted tempWanted vddWanted
+                    )
+
+                    setupResult = monteBenchmarkCalcTiming(setupTable[key])
+
+                    when(
+                        numberp(setupResult)
+                        setupCount = setupCount + 1
+                        checksum = checksum + setupResult
+                    )
+
+                    holdResult = monteBenchmarkCalcTiming(holdTable[key])
+
+                    when(
+                        numberp(holdResult)
+                        holdCount = holdCount + 1
+                        checksum = checksum + holdResult
+                    )
+
+                    foreach(
+                        metricWanted etcMetricList
+
+                        etcResult = monteBenchmarkGetEtc(
+                            etcTable[key]
+                            metricWanted
+                        )
+
+                        when(
+                            numberp(etcResult)
+                            etcCount = etcCount + 1
+                            checksum = checksum + etcResult
+                        )
+                    )
+                )
+            )
+        )
+
+        list(setupCount holdCount etcCount checksum)
+    )
+)
+
+
+;==============================================================================
+; Legacy Timing Lookup
+;
+; The entire RDB is scanned for every Sequence / Temperature / VDD condition.
+;==============================================================================
+
+procedure(
+    benchmarkLegacyMonteTiming(
+        rdb testWanted sweepVariableWanted seqWanted tempWanted vddWanted
+    )
+
+    let(
+        (sweepData seqVal tempVal vddVal sweepVal tcqVal)
+
+        sweepData = nil
+
+        foreach(
+            point rdb->points()
+
+            foreach(
+                corner point->corners()
+
+                seqVal = nil
+                tempVal = nil
+                vddVal = nil
+                sweepVal = nil
+                tcqVal = nil
+
+                foreach(
+                    param corner->params()
+
+                    when(
+                        param->name == "monteCarlo::param::sequence"
+                        seqVal = param->value
+                    )
+
+                    when(
+                        param->name == "temperature"
+                        tempVal = param->value
+                    )
+
+                    when(
+                        param->name == "VDD"
+                        vddVal = param->value
+                    )
+
+                    when(
+                        param->name == sweepVariableWanted
+                        sweepVal = param->value
+                    )
+                )
+
+                foreach(
+                    test corner->tests()
+
+                    when(
+                        test->name == testWanted
+
+                        foreach(
+                            output test->outputs()
+
+                            when(
+                                output->name == DFF_CLK_TO_Q_OUTPUT
+                                tcqVal = output->value
+                            )
+                        )
+                    )
+                )
+
+                when(
+                    seqVal == seqWanted &&
+                    tempVal == tempWanted &&
+                    abs(vddVal - vddWanted) < 1e-9 &&
+                    numberp(sweepVal) &&
+                    numberp(tcqVal)
+
+                    sweepData = cons(
+                        list(sweepVal tcqVal)
+                        sweepData
+                    )
+                )
+            )
+        )
+
+        monteBenchmarkCalcTiming(sweepData)
+    )
+)
+
+
+;==============================================================================
+; Legacy ETC Lookup
+;
+; The entire RDB is scanned for every metric and every Monte condition.
+;==============================================================================
+
+procedure(
+    benchmarkLegacyMonteEtc(
+        rdb seqWanted tempWanted vddWanted metricWanted
+    )
+
+    let(
+        (seqVal tempVal vddVal candidateVal result)
+
+        result = nil
+
+        foreach(
+            point rdb->points()
+
+            foreach(
+                corner point->corners()
+
+                seqVal = nil
+                tempVal = nil
+                vddVal = nil
+
+                foreach(
+                    param corner->params()
+
+                    when(
+                        param->name == "monteCarlo::param::sequence"
+                        seqVal = param->value
+                    )
+
+                    when(
+                        param->name == "temperature"
+                        tempVal = param->value
+                    )
+
+                    when(
+                        param->name == "VDD"
+                        vddVal = param->value
+                    )
+                )
+
+                when(
+                    seqVal == seqWanted &&
+                    tempVal == tempWanted &&
+                    abs(vddVal - vddWanted) < 1e-9
+
+                    foreach(
+                        test corner->tests()
+
+                        when(
+                            test->name == DFF_ETC_TEST_NAME
+
+                            foreach(
+                                output test->outputs()
+
+                                when(
+                                    output->type == 'expr &&
+                                    output->name == metricWanted
+
+                                    candidateVal = output->value
+
+                                    when(
+                                        numberp(candidateVal)
+                                        result = candidateVal
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        result
+    )
+)
+
+
+;==============================================================================
+; Legacy Benchmark
+;==============================================================================
+
+procedure(
+    benchmarkLegacyMonte(rdb)
+
+    let(
+        (
+            sequenceList tempList vddList etcMetricList
+            seqVal tempVal vddVal
+            seqWanted tempWanted vddWanted metricWanted
+            setupResult holdResult etcResult
+            setupCount holdCount etcCount checksum
+        )
+
+        sequenceList = nil
+        tempList = nil
+        vddList = nil
+        etcMetricList = nil
+
+        setupCount = 0
+        holdCount = 0
+        etcCount = 0
+        checksum = 0.0
+
+        ; Discover ETC scalar metrics.
+        foreach(
+            point rdb->points()
+
+            foreach(
+                corner point->corners()
+
+                foreach(
+                    test corner->tests()
+
+                    when(
+                        test->name == DFF_ETC_TEST_NAME
+
+                        foreach(
+                            output test->outputs()
+
+                            when(
+                                output->type == 'expr &&
+                                output->name &&
+                                numberp(output->value)
+
+                                unless(member(output->name etcMetricList)
+                                    etcMetricList = cons(
+                                        output->name
+                                        etcMetricList
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        ; Discover Sequence / Temperature / VDD.
+        foreach(
+            point rdb->points()
+
+            foreach(
+                corner point->corners()
+
+                seqVal = nil
+                tempVal = nil
+                vddVal = nil
+
+                foreach(
+                    param corner->params()
+
+                    when(
+                        param->name == "monteCarlo::param::sequence"
+                        seqVal = param->value
+                    )
+
+                    when(
+                        param->name == "temperature"
+                        tempVal = param->value
+                    )
+
+                    when(
+                        param->name == "VDD"
+                        vddVal = param->value
+                    )
+                )
+
+                when(
+                    seqVal != nil && !member(seqVal sequenceList)
+                    sequenceList = cons(seqVal sequenceList)
+                )
+
+                when(
+                    tempVal != nil && !member(tempVal tempList)
+                    tempList = cons(tempVal tempList)
+                )
+
+                when(
+                    vddVal != nil && !member(vddVal vddList)
+                    vddList = cons(vddVal vddList)
+                )
+            )
+        )
+
+        sequenceList = reverse(sequenceList)
+        tempList = reverse(tempList)
+        vddList = reverse(vddList)
+        etcMetricList = reverse(etcMetricList)
+
+        ; Re-scan the complete RDB for every requested result.
+        foreach(
+            seqWanted sequenceList
+
+            foreach(
+                tempWanted tempList
+
+                foreach(
+                    vddWanted vddList
+
+                    setupResult = benchmarkLegacyMonteTiming(
+                        rdb
+                        DFF_SETUP_TEST_NAME
+                        DFF_SETUP_VARIABLE
+                        seqWanted
+                        tempWanted
+                        vddWanted
+                    )
+
+                    when(
+                        numberp(setupResult)
+                        setupCount = setupCount + 1
+                        checksum = checksum + setupResult
+                    )
+
+                    holdResult = benchmarkLegacyMonteTiming(
+                        rdb
+                        DFF_HOLD_TEST_NAME
+                        DFF_HOLD_VARIABLE
+                        seqWanted
+                        tempWanted
+                        vddWanted
+                    )
+
+                    when(
+                        numberp(holdResult)
+                        holdCount = holdCount + 1
+                        checksum = checksum + holdResult
+                    )
+
+                    foreach(
+                        metricWanted etcMetricList
+
+                        etcResult = benchmarkLegacyMonteEtc(
+                            rdb
+                            seqWanted
+                            tempWanted
+                            vddWanted
+                            metricWanted
+                        )
+
+                        when(
+                            numberp(etcResult)
+                            etcCount = etcCount + 1
+                            checksum = checksum + etcResult
+                        )
+                    )
+                )
+            )
+        )
+
+        list(setupCount holdCount etcCount checksum)
+    )
+)
+
+
+;==============================================================================
+; Run One-Pass First
+;==============================================================================
+
+printf("\nRunning One-Pass Monte benchmark...\n")
+
+onePassStartTime = getCurrentTime()
+onePassResult = benchmarkOnePassMonte(rdb)
+onePassEndTime = getCurrentTime()
+onePassElapsedSec = compareTime(onePassEndTime onePassStartTime)
+
+
+;==============================================================================
+; Run Legacy Second
+;
+; Legacy receives the warm-RDB advantage. This makes the measured speedup
+; conservative for the One-Pass implementation.
+;==============================================================================
+
+printf("Running Legacy Monte benchmark...\n")
+
+legacyStartTime = getCurrentTime()
+legacyResult = benchmarkLegacyMonte(rdb)
+legacyEndTime = getCurrentTime()
+legacyElapsedSec = compareTime(legacyEndTime legacyStartTime)
+
+
+;==============================================================================
+; Validate Results
+;==============================================================================
+
+onePassSetupCount = nth(0 onePassResult)
+onePassHoldCount = nth(1 onePassResult)
+onePassEtcCount = nth(2 onePassResult)
+onePassChecksum = nth(3 onePassResult)
+
+legacySetupCount = nth(0 legacyResult)
+legacyHoldCount = nth(1 legacyResult)
+legacyEtcCount = nth(2 legacyResult)
+legacyChecksum = nth(3 legacyResult)
+
+resultCountsMatch =
+    onePassSetupCount == legacySetupCount &&
+    onePassHoldCount == legacyHoldCount &&
+    onePassEtcCount == legacyEtcCount
+
+checksumDifference = abs(onePassChecksum - legacyChecksum)
+checksumMatch = checksumDifference < 1e-12
+
+
+;==============================================================================
+; Calculate Speedup
+;==============================================================================
+
+speedup = nil
+reductionPct = nil
+
+when(
+    onePassElapsedSec > 0 && legacyElapsedSec > 0
+
+    speedup = 1.0 * legacyElapsedSec / onePassElapsedSec
+
+    reductionPct =
+        100.0 *
+        (legacyElapsedSec - onePassElapsedSec) /
+        legacyElapsedSec
+)
+
+
+;==============================================================================
+; Save Benchmark Log
+;==============================================================================
+
+benchmarkLogPath = strcat(
+    DFF_LOG_DIR
+    "/monte_postprocess_benchmark.log"
+)
+
+benchmarkLog = outfile(benchmarkLogPath)
+
+fprintf(benchmarkLog "========================================================\n")
+fprintf(benchmarkLog "Monte Carlo Post-Processing Benchmark\n")
+fprintf(benchmarkLog "========================================================\n")
+fprintf(benchmarkLog "History             : %s\n" currentHistory)
+fprintf(benchmarkLog "Simulation          : %L sec\n" simulationElapsedSec)
+fprintf(benchmarkLog "RDB Read            : %L sec\n" rdbReadElapsedSec)
+fprintf(benchmarkLog "One-Pass            : %L sec\n" onePassElapsedSec)
+fprintf(benchmarkLog "Legacy              : %L sec\n" legacyElapsedSec)
+fprintf(
+    benchmarkLog
+    "One-Pass Counts     : Setup=%L Hold=%L ETC=%L\n"
+    onePassSetupCount onePassHoldCount onePassEtcCount
+)
+fprintf(
+    benchmarkLog
+    "Legacy Counts       : Setup=%L Hold=%L ETC=%L\n"
+    legacySetupCount legacyHoldCount legacyEtcCount
+)
+fprintf(benchmarkLog "Result Counts Match : %L\n" resultCountsMatch)
+fprintf(benchmarkLog "One-Pass Checksum   : %L\n" onePassChecksum)
+fprintf(benchmarkLog "Legacy Checksum     : %L\n" legacyChecksum)
+fprintf(benchmarkLog "Checksum Difference : %L\n" checksumDifference)
+fprintf(benchmarkLog "Checksum Match      : %L\n" checksumMatch)
+
+if(
+    speedup
+    then
+        fprintf(benchmarkLog "Speedup             : %.3f x\n" speedup)
+        fprintf(benchmarkLog "Runtime Reduction   : %.2f %%\n" reductionPct)
+    else
+        fprintf(benchmarkLog "Speedup             : N/A (timer resolution)\n")
+        fprintf(benchmarkLog "Runtime Reduction   : N/A (timer resolution)\n")
+)
+
+fprintf(benchmarkLog "========================================================\n")
+fprintf(
+    benchmarkLog
+    "Speedup scope: algorithm only; simulation, RDB load, CSV, Python excluded.\n"
+)
+fprintf(
+    benchmarkLog
+    "One-Pass runs first; Legacy therefore receives the warm-RDB advantage.\n"
+)
+fprintf(benchmarkLog "========================================================\n")
+
+close(benchmarkLog)
+
+
+;==============================================================================
+; Final CIW Summary
+;==============================================================================
+
+printf("\n")
+printf("========================================================\n")
+printf(" Monte Carlo Post-Processing Benchmark Completed\n")
+printf("========================================================\n")
+printf(" History             : %s\n" currentHistory)
+printf(" Simulation          : %L sec\n" simulationElapsedSec)
+printf(" RDB Read            : %L sec\n" rdbReadElapsedSec)
+printf(" One-Pass            : %L sec\n" onePassElapsedSec)
+printf(" Legacy              : %L sec\n" legacyElapsedSec)
+printf(
+    " One-Pass Counts     : Setup=%L Hold=%L ETC=%L\n"
+    onePassSetupCount onePassHoldCount onePassEtcCount
+)
+printf(
+    " Legacy Counts       : Setup=%L Hold=%L ETC=%L\n"
+    legacySetupCount legacyHoldCount legacyEtcCount
+)
+printf(" Result Counts Match : %L\n" resultCountsMatch)
+printf(" Checksum Match      : %L\n" checksumMatch)
+
+if(
+    speedup
+    then
+        printf(" Speedup             : %.3f x\n" speedup)
+        printf(" Runtime Reduction   : %.2f %%\n" reductionPct)
+    else
+        printf(" Speedup             : N/A (timer resolution)\n")
+        printf(" Runtime Reduction   : N/A (timer resolution)\n")
+)
+
+printf(" LOG                 : %s\n" benchmarkLogPath)
+printf("========================================================\n\n")
+
+
+;==============================================================================
+; End XL Mode
+;==============================================================================
+
+ocnxlEndXLMode("assembler")
+

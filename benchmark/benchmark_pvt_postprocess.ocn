@@ -1,0 +1,1907 @@
+;==============================================================================
+; PVT Post-Processing Benchmark
+;
+; Purpose:
+;   Compare the legacy repeated-RDB traversal algorithm with the optimized
+;   one-pass cache algorithm using the exact same Maestro history.
+;
+; Important:
+;   - No circuit simulation is launched by this script.
+;   - The RDB is loaded once and shared by both implementations.
+;   - CSV / Python / Excel generation is excluded.
+;   - The measured value is algorithm-only post-processing time.
+;   - One-Pass is measured first. Legacy is measured second on an already
+;     accessed RDB, which makes the comparison conservative for One-Pass.
+;==============================================================================
+
+
+;==============================================================================
+; User Benchmark Settings
+;==============================================================================
+
+PVT_BENCHMARK_HISTORY =
+    "Sep 26 06:41:35 2026.0"
+
+
+;==============================================================================
+; Load Project Configuration
+;==============================================================================
+
+DFF_CHAR_ROOT =
+    getShellEnvVar(
+        "DFF_CHAR_ROOT"
+    )
+
+unless(
+    DFF_CHAR_ROOT
+
+    error(
+        "ERROR: DFF_CHAR_ROOT environment variable is not set.\n"
+    )
+)
+
+load(
+    strcat(
+        DFF_CHAR_ROOT
+        "/config/config.il"
+    )
+)
+
+
+;==============================================================================
+; Open Maestro Session
+;==============================================================================
+
+ocnSetXLMode(
+    "assembler"
+)
+
+ocnxlProjectDir(
+    DFF_PROJECT_DIR
+)
+
+ocnxlTargetCellView(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_MAESTRO_VIEW
+    ?mode "r"
+)
+
+
+;==============================================================================
+; Load Existing PVT RDB
+;==============================================================================
+
+printf("\n")
+printf("========================================================\n")
+printf(" PVT Post-Processing Benchmark\n")
+printf("========================================================\n")
+printf(" History : %s\n" PVT_BENCHMARK_HISTORY)
+printf("========================================================\n")
+
+rdbReadStartTime =
+    getCurrentTime()
+
+rdb =
+    axlReadHistoryResDB(
+        PVT_BENCHMARK_HISTORY
+        ?session ocnxlGetSession()
+    )
+
+rdbReadEndTime =
+    getCurrentTime()
+
+unless(
+    rdb
+
+    error(
+        "ERROR: Failed to read benchmark Maestro history: %s\n"
+        PVT_BENCHMARK_HISTORY
+    )
+)
+
+rdbReadElapsedSec =
+    compareTime(
+        rdbReadEndTime
+        rdbReadStartTime
+    )
+
+printf(
+    " RDB Read : %L sec\n"
+    rdbReadElapsedSec
+)
+
+
+;==============================================================================
+; Shared Timing Extraction
+;
+; Input:
+;   dataList = ((SweepValue tCQ) ...)
+;
+; Output:
+;   Timing value at the configured CLK-to-Q degradation threshold.
+;==============================================================================
+
+procedure(
+    benchmarkCalcTiming(
+        dataList
+    )
+
+    let(
+        (
+            sortedData
+            nominalTcq
+            threshold
+            timingValue
+
+            prevX
+            prevY
+
+            x
+            y
+        )
+
+        nominalTcq =
+            nil
+
+        timingValue =
+            nil
+
+        when(
+            dataList
+
+            sortedData =
+                sortcar(
+                    dataList
+                    'lessp
+                )
+
+            foreach(
+                item
+                sortedData
+
+                x =
+                    car(
+                        item
+                    )
+
+                y =
+                    cadr(
+                        item
+                    )
+
+                when(
+                    abs(
+                        x
+                        -
+                        DFF_TIMING_REFERENCE
+                    )
+                    <
+                    1e-15
+
+                    nominalTcq =
+                        y
+                )
+            )
+
+            when(
+                nominalTcq
+
+                threshold =
+                    nominalTcq
+                    *
+                    DFF_TIMING_DEGRADATION
+
+                prevX =
+                    nil
+
+                prevY =
+                    nil
+
+                foreach(
+                    item
+                    sortedData
+
+                    x =
+                        car(
+                            item
+                        )
+
+                    y =
+                        cadr(
+                            item
+                        )
+
+                    when(
+                        timingValue == nil
+                        &&
+                        prevY != nil
+                        &&
+                        prevY >= threshold
+                        &&
+                        y <= threshold
+
+                        if(
+                            y == prevY
+
+                            then
+
+                                timingValue =
+                                    x
+
+                            else
+
+                                timingValue =
+                                    prevX
+                                    +
+                                    (
+                                        threshold
+                                        -
+                                        prevY
+                                    )
+                                    *
+                                    (
+                                        x
+                                        -
+                                        prevX
+                                    )
+                                    /
+                                    (
+                                        y
+                                        -
+                                        prevY
+                                    )
+                        )
+                    )
+
+                    prevX =
+                        x
+
+                    prevY =
+                        y
+                )
+            )
+        )
+
+        timingValue
+    )
+)
+
+
+;==============================================================================
+; PVT Cache Key
+;==============================================================================
+
+procedure(
+    benchmarkMakePvtKey(
+        processVal
+        tempVal
+        vddVal
+    )
+
+    sprintf(
+        nil
+        "%s|%L|%L"
+        processVal
+        tempVal
+        vddVal
+    )
+)
+
+
+;==============================================================================
+; Cached ETC Lookup
+;==============================================================================
+
+procedure(
+    benchmarkGetCachedEtcValue(
+        dataList
+        metricWanted
+    )
+
+    let(
+        (
+            result
+        )
+
+        result =
+            nil
+
+        foreach(
+            item
+            dataList
+
+            when(
+                car(
+                    item
+                )
+                ==
+                metricWanted
+
+                result =
+                    cadr(
+                        item
+                    )
+            )
+        )
+
+        result
+    )
+)
+
+
+;==============================================================================
+; One-Pass Benchmark
+;
+; The complete RDB is traversed once. Setup/Hold sweep data and ETC scalar
+; metrics are cached by Process | Temperature | VDD.
+;==============================================================================
+
+procedure(
+    benchmarkOnePassPvt(
+        rdb
+    )
+
+    let(
+        (
+            setupDataTable
+            holdDataTable
+            etcDataTable
+
+            processList
+            tempList
+            vddList
+            etcMetricList
+
+            processVal
+            tempVal
+            vddVal
+            tsetupVal
+            tholdVal
+            modelSpecVal
+            outputVal
+            key
+
+            processWanted
+            tempWanted
+            vddWanted
+            metricWanted
+
+            setupResult
+            holdResult
+            etcResult
+
+            setupCount
+            holdCount
+            etcCount
+            checksum
+        )
+
+        setupDataTable =
+            makeTable(
+                "benchmarkOnePassSetup"
+                nil
+            )
+
+        holdDataTable =
+            makeTable(
+                "benchmarkOnePassHold"
+                nil
+            )
+
+        etcDataTable =
+            makeTable(
+                "benchmarkOnePassEtc"
+                nil
+            )
+
+        processList =
+            nil
+
+        tempList =
+            nil
+
+        vddList =
+            nil
+
+        etcMetricList =
+            nil
+
+        setupCount =
+            0
+
+        holdCount =
+            0
+
+        etcCount =
+            0
+
+        checksum =
+            0.0
+
+
+        ;----------------------------------------------------------------------
+        ; One complete RDB traversal
+        ;----------------------------------------------------------------------
+
+        foreach(
+            point
+            rdb->points()
+
+            foreach(
+                corner
+                point->corners()
+
+                processVal =
+                    nil
+
+                tempVal =
+                    nil
+
+                vddVal =
+                    nil
+
+                tsetupVal =
+                    nil
+
+                tholdVal =
+                    nil
+
+                modelSpecVal =
+                    nil
+
+                foreach(
+                    param
+                    corner->params()
+
+                    when(
+                        param->name
+                        ==
+                        "temperature"
+
+                        tempVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        "VDD"
+
+                        vddVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        DFF_SETUP_VARIABLE
+
+                        tsetupVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        DFF_HOLD_VARIABLE
+
+                        tholdVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        "corModelSpec"
+
+                        modelSpecVal =
+                            param->value
+
+                        when(
+                            modelSpecVal
+
+                            processVal =
+                                cadr(
+                                    car(
+                                        modelSpecVal
+                                    )
+                                )
+                        )
+                    )
+                )
+
+                when(
+                    processVal != nil
+                    &&
+                    tempVal != nil
+                    &&
+                    vddVal != nil
+
+                    key =
+                        benchmarkMakePvtKey(
+                            processVal
+                            tempVal
+                            vddVal
+                        )
+
+                    unless(
+                        member(
+                            processVal
+                            processList
+                        )
+
+                        processList =
+                            cons(
+                                processVal
+                                processList
+                            )
+                    )
+
+                    unless(
+                        member(
+                            tempVal
+                            tempList
+                        )
+
+                        tempList =
+                            cons(
+                                tempVal
+                                tempList
+                            )
+                    )
+
+                    unless(
+                        member(
+                            vddVal
+                            vddList
+                        )
+
+                        vddList =
+                            cons(
+                                vddVal
+                                vddList
+                            )
+                    )
+
+                    foreach(
+                        test
+                        corner->tests()
+
+                        when(
+                            test->name
+                            ==
+                            DFF_SETUP_TEST_NAME
+
+                            foreach(
+                                output
+                                test->outputs()
+
+                                when(
+                                    output->name
+                                    ==
+                                    DFF_CLK_TO_Q_OUTPUT
+
+                                    outputVal =
+                                        output->value
+
+                                    when(
+                                        numberp(
+                                            tsetupVal
+                                        )
+                                        &&
+                                        numberp(
+                                            outputVal
+                                        )
+
+                                        setupDataTable[key] =
+                                            cons(
+                                                list(
+                                                    tsetupVal
+                                                    outputVal
+                                                )
+                                                setupDataTable[key]
+                                            )
+                                    )
+                                )
+                            )
+                        )
+
+                        when(
+                            test->name
+                            ==
+                            DFF_HOLD_TEST_NAME
+
+                            foreach(
+                                output
+                                test->outputs()
+
+                                when(
+                                    output->name
+                                    ==
+                                    DFF_CLK_TO_Q_OUTPUT
+
+                                    outputVal =
+                                        output->value
+
+                                    when(
+                                        numberp(
+                                            tholdVal
+                                        )
+                                        &&
+                                        numberp(
+                                            outputVal
+                                        )
+
+                                        holdDataTable[key] =
+                                            cons(
+                                                list(
+                                                    tholdVal
+                                                    outputVal
+                                                )
+                                                holdDataTable[key]
+                                            )
+                                    )
+                                )
+                            )
+                        )
+
+                        when(
+                            test->name
+                            ==
+                            DFF_ETC_TEST_NAME
+
+                            foreach(
+                                output
+                                test->outputs()
+
+                                when(
+                                    output->type
+                                    ==
+                                    'expr
+                                    &&
+                                    output->name
+
+                                    outputVal =
+                                        output->value
+
+                                    when(
+                                        numberp(
+                                            outputVal
+                                        )
+
+                                        unless(
+                                            member(
+                                                output->name
+                                                etcMetricList
+                                            )
+
+                                            etcMetricList =
+                                                cons(
+                                                    output->name
+                                                    etcMetricList
+                                                )
+                                        )
+
+                                        etcDataTable[key] =
+                                            cons(
+                                                list(
+                                                    output->name
+                                                    outputVal
+                                                )
+                                                etcDataTable[key]
+                                            )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+
+        ;----------------------------------------------------------------------
+        ; Finalize condition lists
+        ;----------------------------------------------------------------------
+
+        processList =
+            reverse(
+                processList
+            )
+
+        tempList =
+            reverse(
+                tempList
+            )
+
+        vddList =
+            reverse(
+                vddList
+            )
+
+        etcMetricList =
+            reverse(
+                etcMetricList
+            )
+
+
+        ;----------------------------------------------------------------------
+        ; Calculate all cached outputs
+        ;----------------------------------------------------------------------
+
+        foreach(
+            processWanted
+            processList
+
+            foreach(
+                vddWanted
+                vddList
+
+                foreach(
+                    tempWanted
+                    tempList
+
+                    key =
+                        benchmarkMakePvtKey(
+                            processWanted
+                            tempWanted
+                            vddWanted
+                        )
+
+                    setupResult =
+                        benchmarkCalcTiming(
+                            setupDataTable[key]
+                        )
+
+                    when(
+                        numberp(
+                            setupResult
+                        )
+
+                        setupCount =
+                            setupCount
+                            +
+                            1
+
+                        checksum =
+                            checksum
+                            +
+                            setupResult
+                    )
+
+                    holdResult =
+                        benchmarkCalcTiming(
+                            holdDataTable[key]
+                        )
+
+                    when(
+                        numberp(
+                            holdResult
+                        )
+
+                        holdCount =
+                            holdCount
+                            +
+                            1
+
+                        checksum =
+                            checksum
+                            +
+                            holdResult
+                    )
+
+                    foreach(
+                        metricWanted
+                        etcMetricList
+
+                        etcResult =
+                            benchmarkGetCachedEtcValue(
+                                etcDataTable[key]
+                                metricWanted
+                            )
+
+                        when(
+                            numberp(
+                                etcResult
+                            )
+
+                            etcCount =
+                                etcCount
+                                +
+                                1
+
+                            checksum =
+                                checksum
+                                +
+                                etcResult
+                        )
+                    )
+                )
+            )
+        )
+
+        list(
+            setupCount
+            holdCount
+            etcCount
+            checksum
+        )
+    )
+)
+
+
+;==============================================================================
+; Legacy Timing Calculation
+;
+; One complete RDB traversal is performed for every requested
+; Process / Temperature / VDD condition.
+;==============================================================================
+
+procedure(
+    benchmarkLegacyTimingForCondition(
+        rdb
+        testWanted
+        sweepVariableWanted
+        processWanted
+        tempWanted
+        vddWanted
+    )
+
+    let(
+        (
+            sweepData
+            sweepVal
+            tempVal
+            vddVal
+            processVal
+            modelSpecVal
+            tcqVal
+        )
+
+        sweepData =
+            nil
+
+        foreach(
+            point
+            rdb->points()
+
+            foreach(
+                corner
+                point->corners()
+
+                sweepVal =
+                    nil
+
+                tempVal =
+                    nil
+
+                vddVal =
+                    nil
+
+                processVal =
+                    nil
+
+                modelSpecVal =
+                    nil
+
+                tcqVal =
+                    nil
+
+                foreach(
+                    param
+                    corner->params()
+
+                    when(
+                        param->name
+                        ==
+                        sweepVariableWanted
+
+                        sweepVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        "temperature"
+
+                        tempVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        "VDD"
+
+                        vddVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        "corModelSpec"
+
+                        modelSpecVal =
+                            param->value
+
+                        when(
+                            modelSpecVal
+
+                            processVal =
+                                cadr(
+                                    car(
+                                        modelSpecVal
+                                    )
+                                )
+                        )
+                    )
+                )
+
+                foreach(
+                    test
+                    corner->tests()
+
+                    when(
+                        test->name
+                        ==
+                        testWanted
+
+                        foreach(
+                            output
+                            test->outputs()
+
+                            when(
+                                output->name
+                                ==
+                                DFF_CLK_TO_Q_OUTPUT
+
+                                tcqVal =
+                                    output->value
+                            )
+                        )
+                    )
+                )
+
+                when(
+                    numberp(
+                        sweepVal
+                    )
+                    &&
+                    numberp(
+                        tcqVal
+                    )
+                    &&
+                    equal(
+                        processVal
+                        processWanted
+                    )
+                    &&
+                    tempVal
+                    ==
+                    tempWanted
+                    &&
+                    abs(
+                        vddVal
+                        -
+                        vddWanted
+                    )
+                    <
+                    1e-9
+
+                    sweepData =
+                        cons(
+                            list(
+                                sweepVal
+                                tcqVal
+                            )
+                            sweepData
+                        )
+                )
+            )
+        )
+
+        benchmarkCalcTiming(
+            sweepData
+        )
+    )
+)
+
+
+;==============================================================================
+; Legacy ETC Lookup
+;
+; One complete RDB traversal is performed for every requested scalar metric
+; and every Process / Temperature / VDD condition.
+;==============================================================================
+
+procedure(
+    benchmarkLegacyEtcForCondition(
+        rdb
+        processWanted
+        tempWanted
+        vddWanted
+        metricWanted
+    )
+
+    let(
+        (
+            tempVal
+            vddVal
+            processVal
+            modelSpecVal
+            outputVal
+        )
+
+        outputVal =
+            nil
+
+        foreach(
+            point
+            rdb->points()
+
+            foreach(
+                corner
+                point->corners()
+
+                tempVal =
+                    nil
+
+                vddVal =
+                    nil
+
+                processVal =
+                    nil
+
+                modelSpecVal =
+                    nil
+
+                foreach(
+                    param
+                    corner->params()
+
+                    when(
+                        param->name
+                        ==
+                        "temperature"
+
+                        tempVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        "VDD"
+
+                        vddVal =
+                            param->value
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        "corModelSpec"
+
+                        modelSpecVal =
+                            param->value
+
+                        when(
+                            modelSpecVal
+
+                            processVal =
+                                cadr(
+                                    car(
+                                        modelSpecVal
+                                    )
+                                )
+                        )
+                    )
+                )
+
+                when(
+                    equal(
+                        processVal
+                        processWanted
+                    )
+                    &&
+                    tempVal
+                    ==
+                    tempWanted
+                    &&
+                    abs(
+                        vddVal
+                        -
+                        vddWanted
+                    )
+                    <
+                    1e-9
+
+                    foreach(
+                        test
+                        corner->tests()
+
+                        when(
+                            test->name
+                            ==
+                            DFF_ETC_TEST_NAME
+
+                            foreach(
+                                output
+                                test->outputs()
+
+                                when(
+                                    output->type
+                                    ==
+                                    'expr
+                                    &&
+                                    output->name
+                                    ==
+                                    metricWanted
+
+                                    candidateVal =
+                                        output->value
+
+                                    when(
+                                        numberp(
+                                            candidateVal
+                                        )
+
+                                        outputVal =
+                                            candidateVal
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        outputVal
+    )
+)
+
+
+;==============================================================================
+; Legacy Benchmark
+;
+; This reproduces the original repeated-traversal architecture:
+;   1. Discover ETC metrics
+;   2. Discover Temperature / VDD
+;   3. Discover Process
+;   4. Re-scan the complete RDB for each Setup condition
+;   5. Re-scan the complete RDB for each Hold condition
+;   6. Re-scan the complete RDB for each ETC metric / condition
+;==============================================================================
+
+procedure(
+    benchmarkLegacyPvt(
+        rdb
+    )
+
+    let(
+        (
+            processList
+            tempList
+            vddList
+            etcMetricList
+
+            modelSpecVal
+            processVal
+
+            processWanted
+            tempWanted
+            vddWanted
+            metricWanted
+
+            setupResult
+            holdResult
+            etcResult
+
+            setupCount
+            holdCount
+            etcCount
+            checksum
+        )
+
+        processList =
+            nil
+
+        tempList =
+            nil
+
+        vddList =
+            nil
+
+        etcMetricList =
+            nil
+
+        setupCount =
+            0
+
+        holdCount =
+            0
+
+        etcCount =
+            0
+
+        checksum =
+            0.0
+
+
+        ;----------------------------------------------------------------------
+        ; Discover ETC scalar metrics
+        ;----------------------------------------------------------------------
+
+        foreach(
+            point
+            rdb->points()
+
+            foreach(
+                corner
+                point->corners()
+
+                foreach(
+                    test
+                    corner->tests()
+
+                    when(
+                        test->name
+                        ==
+                        DFF_ETC_TEST_NAME
+
+                        foreach(
+                            output
+                            test->outputs()
+
+                            when(
+                                output->type
+                                ==
+                                'expr
+                                &&
+                                output->name
+                                &&
+                                numberp(
+                                    output->value
+                                )
+
+                                unless(
+                                    member(
+                                        output->name
+                                        etcMetricList
+                                    )
+
+                                    etcMetricList =
+                                        cons(
+                                            output->name
+                                            etcMetricList
+                                        )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+
+        ;----------------------------------------------------------------------
+        ; Discover Temperature / VDD
+        ;----------------------------------------------------------------------
+
+        foreach(
+            point
+            rdb->points()
+
+            foreach(
+                corner
+                point->corners()
+
+                foreach(
+                    param
+                    corner->params()
+
+                    when(
+                        param->name
+                        ==
+                        "temperature"
+
+                        unless(
+                            member(
+                                param->value
+                                tempList
+                            )
+
+                            tempList =
+                                cons(
+                                    param->value
+                                    tempList
+                                )
+                        )
+                    )
+
+                    when(
+                        param->name
+                        ==
+                        "VDD"
+
+                        unless(
+                            member(
+                                param->value
+                                vddList
+                            )
+
+                            vddList =
+                                cons(
+                                    param->value
+                                    vddList
+                                )
+                        )
+                    )
+                )
+            )
+        )
+
+
+        ;----------------------------------------------------------------------
+        ; Discover Process
+        ;----------------------------------------------------------------------
+
+        foreach(
+            point
+            rdb->points()
+
+            foreach(
+                corner
+                point->corners()
+
+                foreach(
+                    param
+                    corner->params()
+
+                    when(
+                        param->name
+                        ==
+                        "corModelSpec"
+
+                        modelSpecVal =
+                            param->value
+
+                        when(
+                            modelSpecVal
+
+                            processVal =
+                                cadr(
+                                    car(
+                                        modelSpecVal
+                                    )
+                                )
+
+                            unless(
+                                member(
+                                    processVal
+                                    processList
+                                )
+
+                                processList =
+                                    cons(
+                                        processVal
+                                        processList
+                                    )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+
+        processList =
+            reverse(
+                processList
+            )
+
+        tempList =
+            reverse(
+                tempList
+            )
+
+        vddList =
+            reverse(
+                vddList
+            )
+
+        etcMetricList =
+            reverse(
+                etcMetricList
+            )
+
+
+        ;----------------------------------------------------------------------
+        ; Calculate all conditions through repeated RDB traversal
+        ;----------------------------------------------------------------------
+
+        foreach(
+            processWanted
+            processList
+
+            foreach(
+                vddWanted
+                vddList
+
+                foreach(
+                    tempWanted
+                    tempList
+
+                    setupResult =
+                        benchmarkLegacyTimingForCondition(
+                            rdb
+                            DFF_SETUP_TEST_NAME
+                            DFF_SETUP_VARIABLE
+                            processWanted
+                            tempWanted
+                            vddWanted
+                        )
+
+                    when(
+                        numberp(
+                            setupResult
+                        )
+
+                        setupCount =
+                            setupCount
+                            +
+                            1
+
+                        checksum =
+                            checksum
+                            +
+                            setupResult
+                    )
+
+                    holdResult =
+                        benchmarkLegacyTimingForCondition(
+                            rdb
+                            DFF_HOLD_TEST_NAME
+                            DFF_HOLD_VARIABLE
+                            processWanted
+                            tempWanted
+                            vddWanted
+                        )
+
+                    when(
+                        numberp(
+                            holdResult
+                        )
+
+                        holdCount =
+                            holdCount
+                            +
+                            1
+
+                        checksum =
+                            checksum
+                            +
+                            holdResult
+                    )
+
+                    foreach(
+                        metricWanted
+                        etcMetricList
+
+                        etcResult =
+                            benchmarkLegacyEtcForCondition(
+                                rdb
+                                processWanted
+                                tempWanted
+                                vddWanted
+                                metricWanted
+                            )
+
+                        when(
+                            numberp(
+                                etcResult
+                            )
+
+                            etcCount =
+                                etcCount
+                                +
+                                1
+
+                            checksum =
+                                checksum
+                                +
+                                etcResult
+                        )
+                    )
+                )
+            )
+        )
+
+        list(
+            setupCount
+            holdCount
+            etcCount
+            checksum
+        )
+    )
+)
+
+
+;==============================================================================
+; Run One-Pass Benchmark First
+;==============================================================================
+
+printf("\n")
+printf("Running One-Pass benchmark...\n")
+
+onePassStartTime =
+    getCurrentTime()
+
+onePassResult =
+    benchmarkOnePassPvt(
+        rdb
+    )
+
+onePassEndTime =
+    getCurrentTime()
+
+onePassElapsedSec =
+    compareTime(
+        onePassEndTime
+        onePassStartTime
+    )
+
+
+;==============================================================================
+; Run Legacy Benchmark Second
+;
+; Legacy deliberately runs second, after the RDB has already been accessed.
+; This gives Legacy the cache-warm advantage and therefore makes the measured
+; speedup conservative for the One-Pass implementation.
+;==============================================================================
+
+printf("Running Legacy benchmark...\n")
+
+legacyStartTime =
+    getCurrentTime()
+
+legacyResult =
+    benchmarkLegacyPvt(
+        rdb
+    )
+
+legacyEndTime =
+    getCurrentTime()
+
+legacyElapsedSec =
+    compareTime(
+        legacyEndTime
+        legacyStartTime
+    )
+
+
+;==============================================================================
+; Validate Result Counts
+;==============================================================================
+
+onePassSetupCount =
+    nth(
+        0
+        onePassResult
+    )
+
+onePassHoldCount =
+    nth(
+        1
+        onePassResult
+    )
+
+onePassEtcCount =
+    nth(
+        2
+        onePassResult
+    )
+
+onePassChecksum =
+    nth(
+        3
+        onePassResult
+    )
+
+legacySetupCount =
+    nth(
+        0
+        legacyResult
+    )
+
+legacyHoldCount =
+    nth(
+        1
+        legacyResult
+    )
+
+legacyEtcCount =
+    nth(
+        2
+        legacyResult
+    )
+
+legacyChecksum =
+    nth(
+        3
+        legacyResult
+    )
+
+resultCountsMatch =
+    (
+        onePassSetupCount
+        ==
+        legacySetupCount
+        &&
+        onePassHoldCount
+        ==
+        legacyHoldCount
+        &&
+        onePassEtcCount
+        ==
+        legacyEtcCount
+    )
+
+
+;==============================================================================
+; Calculate Speedup
+;==============================================================================
+
+speedup =
+    nil
+
+reductionPct =
+    nil
+
+when(
+    onePassElapsedSec
+    >
+    0
+    &&
+    legacyElapsedSec
+    >
+    0
+
+    speedup =
+        1.0
+        *
+        legacyElapsedSec
+        /
+        onePassElapsedSec
+
+    reductionPct =
+        100.0
+        *
+        (
+            legacyElapsedSec
+            -
+            onePassElapsedSec
+        )
+        /
+        legacyElapsedSec
+)
+
+
+;==============================================================================
+; Save Benchmark Log
+;==============================================================================
+
+benchmarkLogPath =
+    strcat(
+        DFF_LOG_DIR
+        "/pvt_postprocess_benchmark.log"
+    )
+
+benchmarkLog =
+    outfile(
+        benchmarkLogPath
+    )
+
+fprintf(
+    benchmarkLog
+    "========================================================\n"
+)
+
+fprintf(
+    benchmarkLog
+    "PVT Post-Processing Benchmark\n"
+)
+
+fprintf(
+    benchmarkLog
+    "========================================================\n"
+)
+
+fprintf(
+    benchmarkLog
+    "History             : %s\n"
+    PVT_BENCHMARK_HISTORY
+)
+
+fprintf(
+    benchmarkLog
+    "RDB Read            : %L sec\n"
+    rdbReadElapsedSec
+)
+
+fprintf(
+    benchmarkLog
+    "One-Pass            : %L sec\n"
+    onePassElapsedSec
+)
+
+fprintf(
+    benchmarkLog
+    "Legacy              : %L sec\n"
+    legacyElapsedSec
+)
+
+fprintf(
+    benchmarkLog
+    "One-Pass Counts     : Setup=%L Hold=%L ETC=%L\n"
+    onePassSetupCount
+    onePassHoldCount
+    onePassEtcCount
+)
+
+fprintf(
+    benchmarkLog
+    "Legacy Counts       : Setup=%L Hold=%L ETC=%L\n"
+    legacySetupCount
+    legacyHoldCount
+    legacyEtcCount
+)
+
+fprintf(
+    benchmarkLog
+    "Result Counts Match : %L\n"
+    resultCountsMatch
+)
+
+fprintf(
+    benchmarkLog
+    "One-Pass Checksum   : %L\n"
+    onePassChecksum
+)
+
+fprintf(
+    benchmarkLog
+    "Legacy Checksum     : %L\n"
+    legacyChecksum
+)
+
+if(
+    speedup
+
+    then
+
+        fprintf(
+            benchmarkLog
+            "Speedup             : %.3f x\n"
+            speedup
+        )
+
+        fprintf(
+            benchmarkLog
+            "Runtime Reduction   : %.2f %%\n"
+            reductionPct
+        )
+
+    else
+
+        fprintf(
+            benchmarkLog
+            "Speedup             : N/A (timer resolution)\n"
+        )
+
+        fprintf(
+            benchmarkLog
+            "Runtime Reduction   : N/A (timer resolution)\n"
+        )
+)
+
+fprintf(
+    benchmarkLog
+    "========================================================\n"
+)
+
+fprintf(
+    benchmarkLog
+    "Benchmark scope: algorithm only; simulation, RDB load, CSV, Python excluded.\n"
+)
+
+fprintf(
+    benchmarkLog
+    "One-Pass is measured before Legacy; Legacy therefore receives the warm-RDB advantage.\n"
+)
+
+fprintf(
+    benchmarkLog
+    "========================================================\n"
+)
+
+close(
+    benchmarkLog
+)
+
+
+;==============================================================================
+; Final CIW Summary
+;==============================================================================
+
+printf("\n")
+printf("========================================================\n")
+printf(" PVT Post-Processing Benchmark Completed\n")
+printf("========================================================\n")
+printf(" History             : %s\n" PVT_BENCHMARK_HISTORY)
+printf(" RDB Read            : %L sec\n" rdbReadElapsedSec)
+printf(" One-Pass            : %L sec\n" onePassElapsedSec)
+printf(" Legacy              : %L sec\n" legacyElapsedSec)
+printf(
+    " One-Pass Counts     : Setup=%L Hold=%L ETC=%L\n"
+    onePassSetupCount
+    onePassHoldCount
+    onePassEtcCount
+)
+printf(
+    " Legacy Counts       : Setup=%L Hold=%L ETC=%L\n"
+    legacySetupCount
+    legacyHoldCount
+    legacyEtcCount
+)
+printf(
+    " Result Counts Match : %L\n"
+    resultCountsMatch
+)
+
+if(
+    speedup
+
+    then
+
+        printf(
+            " Speedup             : %.3f x\n"
+            speedup
+        )
+
+        printf(
+            " Runtime Reduction   : %.2f %%\n"
+            reductionPct
+        )
+
+    else
+
+        printf(
+            " Speedup             : N/A (timer resolution)\n"
+        )
+
+        printf(
+            " Runtime Reduction   : N/A (timer resolution)\n"
+        )
+)
+
+printf(
+    " LOG                 : %s\n"
+    benchmarkLogPath
+)
+
+printf("========================================================\n\n")
+
+
+;==============================================================================
+; End XL Mode
+;==============================================================================
+
+ocnxlEndXLMode(
+    "assembler"
+)
+

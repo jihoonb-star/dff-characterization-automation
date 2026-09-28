@@ -1,0 +1,1846 @@
+;==============================================================================
+; Automated DFF PVT Characterization
+;
+; Flow:
+;   1. Configure Setup / Hold / ETC tests
+;   2. Run all PVT corners
+;   3. Traverse the Maestro RDB exactly once
+;   4. Cache Setup / Hold sweep data and ETC scalar metrics
+;   5. Export CSV files from the cache
+;   6. Run Python post-processing to generate the Excel report
+;==============================================================================
+
+
+;==============================================================================
+; Load Project Configuration
+;==============================================================================
+
+DFF_CHAR_ROOT = getShellEnvVar(
+    "DFF_CHAR_ROOT"
+)
+
+unless(
+    DFF_CHAR_ROOT
+
+    error(
+        "ERROR: DFF_CHAR_ROOT environment variable is not set.\n"
+    )
+)
+
+load(
+    strcat(
+        DFF_CHAR_ROOT
+        "/config/config.il"
+    )
+)
+
+
+;==============================================================================
+; Maestro Session
+;==============================================================================
+
+ocnSetXLMode(
+    "assembler"
+)
+
+ocnxlProjectDir(
+    DFF_PROJECT_DIR
+)
+
+ocnxlTargetCellView(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_MAESTRO_VIEW
+)
+
+ocnxlMaxJobFail(
+    20
+)
+
+
+;==============================================================================
+; Setup-Time Characterization
+;==============================================================================
+
+ocnxlBeginTest(
+    DFF_SETUP_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_SETUP_TEST_HOLD
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_SETUP_SWEEP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity "None"
+    'noiseSeverity "None"
+    'spSeverity "None"
+    'acSeverity "None"
+    'dcOpSeverity "None"
+    'dcSeverity "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+temp(
+    27
+)
+
+; User-defined CLK-to-Q expression.
+; Replace only this expression if the DUT signal names change.
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name DFF_CLK_TO_Q_OUTPUT
+    ?plot t
+    ?save t
+)
+
+ocnxlEndTest()
+
+
+;==============================================================================
+; Hold-Time Characterization
+;==============================================================================
+
+ocnxlBeginTest(
+    DFF_HOLD_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_HOLD_SWEEP
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_HOLD_TEST_SETUP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity "None"
+    'noiseSeverity "None"
+    'spSeverity "None"
+    'acSeverity "None"
+    'dcOpSeverity "None"
+    'dcSeverity "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+temp(
+    27
+)
+
+; User-defined CLK-to-Q expression.
+; Replace only this expression if the DUT signal names change.
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name DFF_CLK_TO_Q_OUTPUT
+    ?plot t
+    ?save t
+)
+
+ocnxlEndTest()
+
+
+;==============================================================================
+; Additional Scalar Metrics
+;==============================================================================
+
+ocnxlBeginTest(
+    DFF_ETC_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_ETC_HOLD
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_ETC_SETUP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity "None"
+    'noiseSeverity "None"
+    'spSeverity "None"
+    'acSeverity "None"
+    'dcOpSeverity "None"
+    'dcSeverity "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+
+;------------------------------------------------------------------------------
+; User-Defined ETC Outputs
+;
+; Scalar expression outputs are discovered automatically from this test.
+; Values are exported exactly as evaluated by ADE.
+;
+; If display-unit scaling is desired, apply it directly in the ADE expression.
+;------------------------------------------------------------------------------
+
+save(
+    'i
+    "/V4/MINUS"
+)
+
+temp(
+    27
+)
+
+ocnxlOutputExpr(
+    "((integ(IT(\"/V4/MINUS\") 2.5e-07 7.5e-07 \" \") / 1e-06) * VAR(\"VDD\"))"
+    ?name "POWER_CONSUMPTION"
+    ?plot t
+)
+
+ocnxlOutputTerminal(
+    "/V4/MINUS"
+    ?save t
+)
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name "DELAY_CLK_TO_Q"
+    ?plot t
+)
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (0.9 * VAR(\"VDD\")) 1 \"rising\" nil nil nil) - cross(VT(\"/Q\") (0.1 * VAR(\"VDD\")) 1 \"rising\" nil nil nil))"
+    ?name "Q_RISING_TIME"
+    ?plot t
+)
+
+ocnxlEndTest()
+
+
+;==============================================================================
+; Corner Definitions
+;==============================================================================
+
+ocnxlCorner(
+    "CORNER"
+    `(
+        ("variable" "temperature" ,DFF_PVT_TEMPERATURES)
+        ("variable" "VDD" ,DFF_PVT_VDD)
+        ("model" ,DFF_MODEL_FILE ?section ,DFF_PVT_MODEL_SECTIONS)
+        ("model" ,DFF_MODEL_FILE ?enabled nil ?section ,DFF_PRE_SIMU_SECTION)
+        ("modelGroup" "")
+    )
+)
+
+; Keep the Monte corner definition so this script remains compatible with the
+; shared Maestro state. It is explicitly disabled for the PVT run below.
+
+ocnxlCorner(
+    "MONTE"
+    `(
+        ("variable" "temperature" ,DFF_MONTE_TEMPERATURES)
+        ("variable" "VDD" ,DFF_MONTE_VDD)
+        ("model" ,DFF_MODEL_FILE ?section ,DFF_MONTE_MODEL_SECTION)
+        ("model" ,DFF_MODEL_FILE ?enabled nil ?section ,DFF_PRE_SIMU_SECTION)
+        ("modelGroup" "")
+    )
+)
+
+ocnxlDisableCorner(
+    "MONTE"
+)
+
+
+;==============================================================================
+; Job Setup
+;==============================================================================
+
+ocnxlJobSetup(
+    '(
+        "autoresume" "0"
+        "blockemail" "1"
+        "configuretimeout" "300"
+        "defaultcpuvalue" "1"
+        "defaultmemoryvalue" "1000"
+        "distributionmethod" "Local"
+        "jobruntype" "ICRP"
+        "estimatememoryvalue" ""
+        "estimationsimulationmode" "0"
+        "lingertimeout" "300"
+        "maxjobs" "16"
+        "name" "Maestro Default"
+        "preemptivestart" "1"
+        "providecpuandmemorydata" "1"
+        "reconfigureimmediately" "1"
+        "runpointsvalue" "5"
+        "runtimeout" "-1"
+        "scaleestimatedbycpu" "100"
+        "scaleestimatedbymemory" "100"
+        "showerrorwhenretrying" "1"
+        "showoutputlogerror" "0"
+        "startmaxjobsimmed" "1"
+        "starttimeout" "300"
+        "usesameprocess" "1"
+        "warndisklow" "0"
+        "warnthresholdvalue" "100"
+    )
+)
+
+
+;==============================================================================
+; Run PVT Characterization
+;==============================================================================
+
+totalStartTime = getCurrentTime()
+simulationStartTime = getCurrentTime()
+
+ocnxlRun(
+    ?mode 'sweepsAndCorners
+    ?nominalCornerEnabled nil
+    ?allCornersEnabled t
+    ?allSweepsEnabled t
+)
+
+simulationEndTime = getCurrentTime()
+
+simulationElapsedSec = compareTime(
+    simulationEndTime
+    simulationStartTime
+)
+
+
+;==============================================================================
+; Validate Maestro History
+;==============================================================================
+
+currentHistory = ocnxlGetCurrentHistory()
+
+unless(
+    currentHistory
+
+    error(
+        "ERROR: PVT run did not create a Maestro history.\n"
+    )
+)
+
+
+;==============================================================================
+; Read PVT RDB
+;==============================================================================
+
+oceanPostStartTime = getCurrentTime()
+rdbReadStartTime = getCurrentTime()
+
+rdb = axlReadHistoryResDB(
+    currentHistory
+    ?session ocnxlGetSession()
+)
+
+rdbReadEndTime = getCurrentTime()
+
+rdbReadElapsedSec = compareTime(
+    rdbReadEndTime
+    rdbReadStartTime
+)
+
+
+;==============================================================================
+; Open OCEAN Log
+;==============================================================================
+
+oceanLog = outfile(
+    DFF_PVT_OCEAN_LOG
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+fprintf(
+    oceanLog
+    "OCEAN PVT Post Processing Start\n"
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+
+;==============================================================================
+; Cache Key
+;
+; Key:
+;   Process | Temperature | VDD
+;==============================================================================
+
+procedure(
+    makePvtKey(
+        processVal
+        tempVal
+        vddVal
+    )
+
+    sprintf(
+        nil
+        "%s|%L|%L"
+        processVal
+        tempVal
+        vddVal
+    )
+)
+
+
+;==============================================================================
+; Setup / Hold Timing Calculation
+;
+; Input:
+;   dataList = ((SweepValue tCQ) ...)
+;
+; Output:
+;   Timing value at the configured CLK-to-Q degradation threshold.
+;==============================================================================
+
+procedure(
+    calcTimingFromSweepData(
+        dataList
+    )
+
+    let(
+        (
+            sortedData
+            nominalTcq
+            threshold
+            timingValue
+
+            prevX
+            prevY
+
+            x
+            y
+        )
+
+        nominalTcq = nil
+        timingValue = nil
+
+        when(
+            dataList
+
+            ;------------------------------------------------------------------
+            ; Sort by sweep variable
+            ;------------------------------------------------------------------
+
+            sortedData = sortcar(
+                dataList
+                'lessp
+            )
+
+            ;------------------------------------------------------------------
+            ; Find nominal CLK-to-Q
+            ;------------------------------------------------------------------
+
+            foreach(
+                item
+                sortedData
+
+                x = car(
+                    item
+                )
+
+                y = cadr(
+                    item
+                )
+
+                when(
+                    abs(
+                        x - DFF_TIMING_REFERENCE
+                    ) < 1e-15
+
+                    nominalTcq = y
+                )
+            )
+
+            ;------------------------------------------------------------------
+            ; Find the falling threshold crossing
+            ;------------------------------------------------------------------
+
+            when(
+                nominalTcq
+
+                threshold =
+                    nominalTcq
+                    *
+                    DFF_TIMING_DEGRADATION
+
+                prevX = nil
+                prevY = nil
+
+                foreach(
+                    item
+                    sortedData
+
+                    x = car(
+                        item
+                    )
+
+                    y = cadr(
+                        item
+                    )
+
+                    when(
+                        timingValue == nil
+                        &&
+                        prevY != nil
+                        &&
+                        prevY >= threshold
+                        &&
+                        y <= threshold
+
+                        if(
+                            y == prevY
+
+                            then
+
+                                timingValue = x
+
+                            else
+
+                                timingValue =
+                                    prevX
+                                    +
+                                    (
+                                        threshold
+                                        -
+                                        prevY
+                                    )
+                                    *
+                                    (
+                                        x
+                                        -
+                                        prevX
+                                    )
+                                    /
+                                    (
+                                        y
+                                        -
+                                        prevY
+                                    )
+                        )
+                    )
+
+                    prevX = x
+                    prevY = y
+                )
+            )
+        )
+
+        timingValue
+    )
+)
+
+
+;==============================================================================
+; Read Cached ETC Metric
+;==============================================================================
+
+procedure(
+    getCachedEtcValue(
+        dataList
+        metricWanted
+    )
+
+    let(
+        (
+            result
+        )
+
+        result = nil
+
+        foreach(
+            item
+            dataList
+
+            when(
+                car(
+                    item
+                )
+                ==
+                metricWanted
+
+                result = cadr(
+                    item
+                )
+            )
+        )
+
+        result
+    )
+)
+
+
+;==============================================================================
+; Create PVT Data Tables
+;
+; setupDataTable[key]
+;   -> ((SetupSweepValue tCQ) ...)
+;
+; holdDataTable[key]
+;   -> ((HoldSweepValue tCQ) ...)
+;
+; etcDataTable[key]
+;   -> ((MetricName MetricValue) ...)
+;==============================================================================
+
+setupDataTable = makeTable(
+    "setupDataTable"
+    nil
+)
+
+holdDataTable = makeTable(
+    "holdDataTable"
+    nil
+)
+
+etcDataTable = makeTable(
+    "etcDataTable"
+    nil
+)
+
+
+;==============================================================================
+; Build One-Pass PVT Cache
+;
+; The complete RDB is traversed exactly once.
+;==============================================================================
+
+processList = nil
+tempList = nil
+vddList = nil
+etcMetricList = nil
+
+pointCount = 0
+nextProgress = 250
+
+printf("\n")
+printf("============================================\n")
+printf(" Building PVT Data Cache\n")
+printf("============================================\n")
+
+cacheStartTime = getCurrentTime()
+
+foreach(
+    point
+    rdb->points()
+
+    pointCount =
+        pointCount
+        +
+        1
+
+    when(
+        pointCount >= nextProgress
+
+        printf(
+            " RDB points processed : %L\n"
+            pointCount
+        )
+
+        nextProgress =
+            nextProgress
+            +
+            250
+    )
+
+    foreach(
+        corner
+        point->corners()
+
+        processVal = nil
+        tempVal = nil
+        vddVal = nil
+        tsetupVal = nil
+        tholdVal = nil
+
+        ;----------------------------------------------------------------------
+        ; Read corner parameters once
+        ;----------------------------------------------------------------------
+
+        foreach(
+            param
+            corner->params()
+
+            when(
+                param->name == "temperature"
+
+                tempVal = param->value
+            )
+
+            when(
+                param->name == "VDD"
+
+                vddVal = param->value
+            )
+
+            when(
+                param->name == DFF_SETUP_VARIABLE
+
+                tsetupVal = param->value
+            )
+
+            when(
+                param->name == DFF_HOLD_VARIABLE
+
+                tholdVal = param->value
+            )
+
+            when(
+                param->name == "corModelSpec"
+
+                modelSpecVal = param->value
+
+                when(
+                    modelSpecVal
+
+                    processVal =
+                        cadr(
+                            car(
+                                modelSpecVal
+                            )
+                        )
+                )
+            )
+        )
+
+        ;----------------------------------------------------------------------
+        ; Cache only valid PVT conditions
+        ;----------------------------------------------------------------------
+
+        when(
+            processVal != nil
+            &&
+            tempVal != nil
+            &&
+            vddVal != nil
+
+            key = makePvtKey(
+                processVal
+                tempVal
+                vddVal
+            )
+
+            unless(
+                member(
+                    processVal
+                    processList
+                )
+
+                processList = cons(
+                    processVal
+                    processList
+                )
+            )
+
+            unless(
+                member(
+                    tempVal
+                    tempList
+                )
+
+                tempList = cons(
+                    tempVal
+                    tempList
+                )
+            )
+
+            unless(
+                member(
+                    vddVal
+                    vddList
+                )
+
+                vddList = cons(
+                    vddVal
+                    vddList
+                )
+            )
+
+            ;------------------------------------------------------------------
+            ; Read each test once
+            ;------------------------------------------------------------------
+
+            foreach(
+                test
+                corner->tests()
+
+                ;--------------------------------------------------------------
+                ; Setup-Time Sweep
+                ;--------------------------------------------------------------
+
+                when(
+                    test->name == DFF_SETUP_TEST_NAME
+
+                    foreach(
+                        output
+                        test->outputs()
+
+                        when(
+                            output->name == DFF_CLK_TO_Q_OUTPUT
+
+                            outputVal = output->value
+
+                            when(
+                                numberp(
+                                    tsetupVal
+                                )
+                                &&
+                                numberp(
+                                    outputVal
+                                )
+
+                                setupDataTable[key] = cons(
+                                    list(
+                                        tsetupVal
+                                        outputVal
+                                    )
+                                    setupDataTable[key]
+                                )
+                            )
+                        )
+                    )
+                )
+
+                ;--------------------------------------------------------------
+                ; Hold-Time Sweep
+                ;--------------------------------------------------------------
+
+                when(
+                    test->name == DFF_HOLD_TEST_NAME
+
+                    foreach(
+                        output
+                        test->outputs()
+
+                        when(
+                            output->name == DFF_CLK_TO_Q_OUTPUT
+
+                            outputVal = output->value
+
+                            when(
+                                numberp(
+                                    tholdVal
+                                )
+                                &&
+                                numberp(
+                                    outputVal
+                                )
+
+                                holdDataTable[key] = cons(
+                                    list(
+                                        tholdVal
+                                        outputVal
+                                    )
+                                    holdDataTable[key]
+                                )
+                            )
+                        )
+                    )
+                )
+
+                ;--------------------------------------------------------------
+                ; User-Defined ETC Scalar Metrics
+                ;--------------------------------------------------------------
+
+                when(
+                    test->name == DFF_ETC_TEST_NAME
+
+                    foreach(
+                        output
+                        test->outputs()
+
+                        when(
+                            output->type == 'expr
+                            &&
+                            output->name
+
+                            outputVal = output->value
+
+                            when(
+                                numberp(
+                                    outputVal
+                                )
+
+                                unless(
+                                    member(
+                                        output->name
+                                        etcMetricList
+                                    )
+
+                                    etcMetricList = cons(
+                                        output->name
+                                        etcMetricList
+                                    )
+                                )
+
+                                etcDataTable[key] = cons(
+                                    list(
+                                        output->name
+                                        outputVal
+                                    )
+                                    etcDataTable[key]
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)
+
+cacheEndTime = getCurrentTime()
+
+cacheElapsedSec = compareTime(
+    cacheEndTime
+    cacheStartTime
+)
+
+
+;==============================================================================
+; Finalize Cached Lists
+;==============================================================================
+
+processList = reverse(
+    processList
+)
+
+tempList = reverse(
+    tempList
+)
+
+vddList = reverse(
+    vddList
+)
+
+etcMetricList = reverse(
+    etcMetricList
+)
+
+printf("\n")
+printf("============================================\n")
+printf(" PVT Data Cache Completed\n")
+printf("============================================\n")
+printf("RDB Point Count   = %L\n" pointCount)
+printf("Process List      = %L\n" processList)
+printf("Temperature List  = %L\n" tempList)
+printf("VDD List          = %L\n" vddList)
+printf("ETC Metric List   = %L\n" etcMetricList)
+printf("============================================\n\n")
+
+fprintf(
+    oceanLog
+    "RDB Point Count   = %L\n"
+    pointCount
+)
+
+fprintf(
+    oceanLog
+    "Process List      = %L\n"
+    processList
+)
+
+fprintf(
+    oceanLog
+    "Temperature List  = %L\n"
+    tempList
+)
+
+fprintf(
+    oceanLog
+    "VDD List          = %L\n"
+    vddList
+)
+
+fprintf(
+    oceanLog
+    "ETC Metric List   = %L\n"
+    etcMetricList
+)
+
+
+;==============================================================================
+; Export Setup-Time CSV
+;==============================================================================
+
+csvExportStartTime = getCurrentTime()
+
+setupCsv = outfile(
+    DFF_PVT_SETUP_CSV
+)
+
+foreach(
+    processWanted
+    processList
+
+    fprintf(
+        setupCsv
+        "Process,%s\n"
+        processWanted
+    )
+
+    fprintf(
+        setupCsv
+        "VDD(V)"
+    )
+
+    foreach(
+        tempWanted
+        tempList
+
+        fprintf(
+            setupCsv
+            ",%L C"
+            tempWanted
+        )
+    )
+
+    fprintf(
+        setupCsv
+        "\n"
+    )
+
+    foreach(
+        vddWanted
+        vddList
+
+        fprintf(
+            setupCsv
+            "%L"
+            vddWanted
+        )
+
+        foreach(
+            tempWanted
+            tempList
+
+            key = makePvtKey(
+                processWanted
+                tempWanted
+                vddWanted
+            )
+
+            setupResult = calcTimingFromSweepData(
+                setupDataTable[key]
+            )
+
+            if(
+                numberp(
+                    setupResult
+                )
+
+                then
+
+                    fprintf(
+                        setupCsv
+                        ",%g"
+                        setupResult * 1e12
+                    )
+
+                else
+
+                    fprintf(
+                        setupCsv
+                        ",N/A"
+                    )
+            )
+        )
+
+        fprintf(
+            setupCsv
+            "\n"
+        )
+    )
+
+    fprintf(
+        setupCsv
+        "\n"
+    )
+)
+
+close(
+    setupCsv
+)
+
+fprintf(
+    oceanLog
+    "\nSetup CSV Saved : %s\n"
+    DFF_PVT_SETUP_CSV
+)
+
+
+;==============================================================================
+; Export Hold-Time CSV
+;==============================================================================
+
+holdCsv = outfile(
+    DFF_PVT_HOLD_CSV
+)
+
+foreach(
+    processWanted
+    processList
+
+    fprintf(
+        holdCsv
+        "Process,%s\n"
+        processWanted
+    )
+
+    fprintf(
+        holdCsv
+        "VDD(V)"
+    )
+
+    foreach(
+        tempWanted
+        tempList
+
+        fprintf(
+            holdCsv
+            ",%L C"
+            tempWanted
+        )
+    )
+
+    fprintf(
+        holdCsv
+        "\n"
+    )
+
+    foreach(
+        vddWanted
+        vddList
+
+        fprintf(
+            holdCsv
+            "%L"
+            vddWanted
+        )
+
+        foreach(
+            tempWanted
+            tempList
+
+            key = makePvtKey(
+                processWanted
+                tempWanted
+                vddWanted
+            )
+
+            holdResult = calcTimingFromSweepData(
+                holdDataTable[key]
+            )
+
+            if(
+                numberp(
+                    holdResult
+                )
+
+                then
+
+                    fprintf(
+                        holdCsv
+                        ",%g"
+                        holdResult * 1e12
+                    )
+
+                else
+
+                    fprintf(
+                        holdCsv
+                        ",N/A"
+                    )
+            )
+        )
+
+        fprintf(
+            holdCsv
+            "\n"
+        )
+    )
+
+    fprintf(
+        holdCsv
+        "\n"
+    )
+)
+
+close(
+    holdCsv
+)
+
+fprintf(
+    oceanLog
+    "Hold CSV Saved  : %s\n"
+    DFF_PVT_HOLD_CSV
+)
+
+
+;==============================================================================
+; Export ETC CSV
+;==============================================================================
+
+etcCsv = outfile(
+    DFF_PVT_ETC_CSV
+)
+
+foreach(
+    processWanted
+    processList
+
+    fprintf(
+        etcCsv
+        "Process,%s\n"
+        processWanted
+    )
+
+    fprintf(
+        etcCsv
+        "Metric"
+    )
+
+    foreach(
+        vddWanted
+        vddList
+
+        foreach(
+            tempWanted
+            tempList
+
+            fprintf(
+                etcCsv
+                ",%L V / %L C"
+                vddWanted
+                tempWanted
+            )
+        )
+    )
+
+    fprintf(
+        etcCsv
+        "\n"
+    )
+
+    foreach(
+        metricWanted
+        etcMetricList
+
+        fprintf(
+            etcCsv
+            "%s"
+            metricWanted
+        )
+
+        foreach(
+            vddWanted
+            vddList
+
+            foreach(
+                tempWanted
+                tempList
+
+                key = makePvtKey(
+                    processWanted
+                    tempWanted
+                    vddWanted
+                )
+
+                etcResult = getCachedEtcValue(
+                    etcDataTable[key]
+                    metricWanted
+                )
+
+                if(
+                    numberp(
+                        etcResult
+                    )
+
+                    then
+
+                        fprintf(
+                            etcCsv
+                            ",%g"
+                            etcResult
+                        )
+
+                    else
+
+                        fprintf(
+                            etcCsv
+                            ",N/A"
+                        )
+                )
+            )
+        )
+
+        fprintf(
+            etcCsv
+            "\n"
+        )
+    )
+
+    fprintf(
+        etcCsv
+        "\n"
+    )
+)
+
+close(
+    etcCsv
+)
+
+csvExportEndTime = getCurrentTime()
+
+csvExportElapsedSec = compareTime(
+    csvExportEndTime
+    csvExportStartTime
+)
+
+oceanPostEndTime = getCurrentTime()
+
+oceanPostElapsedSec = compareTime(
+    oceanPostEndTime
+    oceanPostStartTime
+)
+
+fprintf(
+    oceanLog
+    "ETC CSV Saved   : %s\n"
+    DFF_PVT_ETC_CSV
+)
+
+
+;==============================================================================
+; Python Post Processing
+;==============================================================================
+
+fprintf(
+    oceanLog
+    "\nRunning Python Post Processing...\n"
+)
+
+pythonStartTime = getCurrentTime()
+
+pythonCommand = sprintf(
+    nil
+    "python3 \"%s\" > \"%s\" 2>&1"
+    DFF_PVT_PYTHON
+    DFF_PVT_PYTHON_LOG
+)
+
+pythonStatus = system(
+    pythonCommand
+)
+
+pythonEndTime = getCurrentTime()
+
+pythonElapsedSec = compareTime(
+    pythonEndTime
+    pythonStartTime
+)
+
+totalEndTime = getCurrentTime()
+
+totalElapsedSec = compareTime(
+    totalEndTime
+    totalStartTime
+)
+
+if(
+    pythonStatus == 0
+
+    then
+
+        pythonSuccess = t
+
+        fprintf(
+            oceanLog
+            "Python Post Processing Completed\n"
+        )
+
+    else
+
+        pythonSuccess = nil
+
+        fprintf(
+            oceanLog
+            "Python Post Processing FAILED : status=%L\n"
+            pythonStatus
+        )
+)
+
+fprintf(
+    oceanLog
+    "\n========================================================\n"
+)
+
+fprintf(
+    oceanLog
+    "PVT Runtime Summary\n"
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+fprintf(
+    oceanLog
+    "Simulation          : %L sec\n"
+    simulationElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "RDB Read            : %L sec\n"
+    rdbReadElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "One-Pass Cache Build: %L sec\n"
+    cacheElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "CSV Export          : %L sec\n"
+    csvExportElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "OCEAN Post Process  : %L sec\n"
+    oceanPostElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "Python Post Process : %L sec\n"
+    pythonElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "Total Flow          : %L sec\n"
+    totalElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+fprintf(
+    oceanLog
+    "OCEAN PVT Post Processing Completed\n"
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+close(
+    oceanLog
+)
+
+
+;==============================================================================
+; Final CIW Message
+;==============================================================================
+
+printf("\n")
+printf("========================================================\n")
+
+if(
+    pythonSuccess
+
+    then
+
+        printf(
+            " PVT Simulation & Post Processing Completed\n"
+        )
+
+        printf(
+            "========================================================\n"
+        )
+
+        printf(
+            " Maestro History : %s\n"
+            currentHistory
+        )
+
+        printf(
+            " RAW CSV  : %s\n"
+            DFF_RAW_DIR
+        )
+
+        printf(
+            " RESULT   : %s\n"
+            DFF_PVT_RESULT
+        )
+
+        printf(
+            " LOG      : %s\n"
+            DFF_LOG_DIR
+        )
+
+    else
+
+        printf(
+            " PVT Simulation Completed / Python Post Processing FAILED\n"
+        )
+
+        printf(
+            "========================================================\n"
+        )
+
+        printf(
+            " Maestro History : %s\n"
+            currentHistory
+        )
+
+        printf(
+            " RAW CSV  : %s\n"
+            DFF_RAW_DIR
+        )
+
+        printf(
+            " ERROR LOG: %s\n"
+            DFF_PVT_PYTHON_LOG
+        )
+)
+
+printf(
+    "========================================================\n"
+)
+
+printf(
+    " Runtime Summary\n"
+)
+
+printf(
+    "--------------------------------------------------------\n"
+)
+
+printf(
+    " Simulation          : %L sec\n"
+    simulationElapsedSec
+)
+
+printf(
+    " RDB Read            : %L sec\n"
+    rdbReadElapsedSec
+)
+
+printf(
+    " One-Pass Cache Build: %L sec\n"
+    cacheElapsedSec
+)
+
+printf(
+    " CSV Export          : %L sec\n"
+    csvExportElapsedSec
+)
+
+printf(
+    " OCEAN Post Process  : %L sec\n"
+    oceanPostElapsedSec
+)
+
+printf(
+    " Python Post Process : %L sec\n"
+    pythonElapsedSec
+)
+
+printf(
+    " Total Flow          : %L sec\n"
+    totalElapsedSec
+)
+
+printf(
+    "========================================================\n\n"
+)
+
+
+;==============================================================================
+; End XL Mode
+;==============================================================================
+
+ocnxlEndXLMode(
+    "assembler"
+)
+

@@ -1,0 +1,2111 @@
+;==============================================================================
+; Load Project Configuration
+;==============================================================================
+
+DFF_CHAR_ROOT = getShellEnvVar(
+    "DFF_CHAR_ROOT"
+)
+
+unless(
+    DFF_CHAR_ROOT
+
+    error(
+        "ERROR: DFF_CHAR_ROOT environment variable is not set.\n"
+    )
+)
+
+load(
+    strcat(
+        DFF_CHAR_ROOT
+        "/config/config.il"
+    )
+)
+
+
+;==============================================================================
+; Set Maestro Mode
+;==============================================================================
+
+ocnSetXLMode(
+    "assembler"
+)
+
+ocnxlProjectDir(
+    DFF_PROJECT_DIR
+)
+
+ocnxlTargetCellView(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_MAESTRO_VIEW
+    ?mode "r"
+)
+
+ocnxlMaxJobFail(
+    20
+)
+
+
+;==============================================================================
+; Tests Setup
+;==============================================================================
+
+
+;------------------------------------------------------------------------------
+; Setup-Time Characterization Test
+;------------------------------------------------------------------------------
+
+ocnxlBeginTest(
+    DFF_SETUP_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_SETUP_TEST_HOLD
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_SETUP_SWEEP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity   "None"
+    'noiseSeverity "None"
+    'spSeverity   "None"
+    'acSeverity   "None"
+    'dcOpSeverity "None"
+    'dcSeverity   "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+temp(
+    27
+)
+
+; User-defined CLK-to-Q expression.
+; Replace only the expression if your DUT uses different signal names.
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name DFF_CLK_TO_Q_OUTPUT
+    ?plot t
+    ?save t
+)
+
+ocnxlEndTest()
+
+
+;------------------------------------------------------------------------------
+; Hold-Time Characterization Test
+;------------------------------------------------------------------------------
+
+ocnxlBeginTest(
+    DFF_HOLD_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_HOLD_SWEEP
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_HOLD_TEST_SETUP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity   "None"
+    'noiseSeverity "None"
+    'spSeverity   "None"
+    'acSeverity   "None"
+    'dcOpSeverity "None"
+    'dcSeverity   "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+temp(
+    27
+)
+
+; User-defined CLK-to-Q expression.
+; Replace only the expression if your DUT uses different signal names.
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name DFF_CLK_TO_Q_OUTPUT
+    ?plot t
+    ?save t
+)
+
+ocnxlEndTest()
+
+
+;------------------------------------------------------------------------------
+; ETC Characterization Test
+;------------------------------------------------------------------------------
+
+ocnxlBeginTest(
+    DFF_ETC_TEST_NAME
+)
+
+simulator(
+    'spectre
+)
+
+design(
+    DFF_LIBRARY
+    DFF_CELL
+    DFF_CONFIG_VIEW
+)
+
+modelFile(
+    list(
+        DFF_TOP_MODEL_FILE
+        DFF_TOP_MODEL_SECTION
+    )
+)
+
+analysis(
+    'tran
+    ?stop "2/VAR(\"frq\")"
+    ?errpreset "conservative"
+)
+
+desVar(
+    "frq"
+    DFF_FREQUENCY
+)
+
+desVar(
+    "CAP"
+    DFF_LOAD_CAP
+)
+
+desVar(
+    "SUB"
+    DFF_SUB
+)
+
+desVar(
+    "VDD"
+    DFF_NOMINAL_VDD
+)
+
+desVar(
+    DFF_HOLD_VARIABLE
+    DFF_ETC_HOLD
+)
+
+desVar(
+    DFF_SETUP_VARIABLE
+    DFF_ETC_SETUP
+)
+
+envOption(
+    'analysisOrder
+    list(
+        "pz"
+        "dcmatch"
+        "stb"
+        "tran"
+        "envlp"
+        "ac"
+        "dc"
+        "lf"
+        "noise"
+        "xf"
+        "sp"
+        "pss"
+        "pac"
+        "pstb"
+        "pnoise"
+        "pxf"
+        "psp"
+        "qpss"
+        "qpac"
+        "qpnoise"
+        "qpxf"
+        "qpsp"
+        "hb"
+        "hbac"
+        "hbstb"
+        "hbnoise"
+        "hbxf"
+        "sens"
+        "acmatch"
+    )
+)
+
+option(
+    'pzSeverity   "None"
+    'noiseSeverity "None"
+    'spSeverity   "None"
+    'acSeverity   "None"
+    'dcOpSeverity "None"
+    'dcSeverity   "None"
+    'tranSeverity "None"
+)
+
+option(
+    ?categ 'turboOpts
+    'psrOption "Ultra Precision Analog"
+    'psrSwitch t
+    'apsplus t
+    'uniMode "APS"
+)
+
+
+;==============================================================================
+; User-Defined ETC Outputs
+;==============================================================================
+
+; Paste ADE-generated save/output statements in this section.
+;
+; Scalar expression outputs are automatically discovered and exported.
+; Waveform-valued expressions are intentionally omitted from this automated
+; Monte Carlo statistics flow.
+;
+; ETC scalar values are exported exactly as evaluated by ADE.
+
+save(
+    'i
+    "/V4/MINUS"
+)
+
+temp(
+    27
+)
+
+
+;------------------------------------------------------------------------------
+; Scalar Outputs
+;------------------------------------------------------------------------------
+
+; Only scalar expressions are registered for Monte Carlo statistics.
+; Waveform-valued expressions are intentionally omitted to avoid unnecessary
+; RDB/PSF waveform loading during post-processing.
+
+
+ocnxlOutputExpr(
+    "((integ(IT(\"/V4/MINUS\") 2.5e-07 7.5e-07 \" \") / 1e-06) * VAR(\"VDD\"))"
+    ?name "POWER_CONSUMPTION"
+    ?plot t
+)
+
+ocnxlOutputTerminal(
+    "/V4/MINUS"
+    ?save t
+)
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil) - cross(VT(\"/CLK\") (VAR(\"VDD\") / 2) 1 \"rising\" nil nil nil))"
+    ?name DFF_CLK_TO_Q_OUTPUT
+    ?plot t
+)
+
+ocnxlOutputExpr(
+    "(cross(VT(\"/Q\") (0.9 * VAR(\"VDD\")) 1 \"rising\" nil nil nil) - cross(VT(\"/Q\") (0.1 * VAR(\"VDD\")) 1 \"rising\" nil nil nil))"
+    ?name "OUTPUT_RISE_TIME"
+    ?plot t
+)
+
+ocnxlEndTest()
+
+
+;==============================================================================
+; Corners Setup
+;==============================================================================
+
+ocnxlCorner(
+    "CORNER"
+    `(
+        (
+            "variable"
+            "temperature"
+            ,DFF_PVT_TEMPERATURES
+        )
+
+        (
+            "variable"
+            "VDD"
+            ,DFF_PVT_VDD
+        )
+
+        (
+            "model"
+            ,DFF_MODEL_FILE
+            ?section
+            ,DFF_PVT_MODEL_SECTIONS
+        )
+
+        (
+            "model"
+            ,DFF_MODEL_FILE
+            ?enabled nil
+            ?section
+            ,DFF_PRE_SIMU_SECTION
+        )
+
+        (
+            "modelGroup"
+            ""
+        )
+    )
+)
+
+
+ocnxlCorner(
+    "MONTE"
+    `(
+        (
+            "variable"
+            "temperature"
+            ,DFF_MONTE_TEMPERATURES
+        )
+
+        (
+            "variable"
+            "VDD"
+            ,DFF_MONTE_VDD
+        )
+
+        (
+            "model"
+            ,DFF_MODEL_FILE
+            ?section
+            ,DFF_MONTE_MODEL_SECTION
+        )
+
+        (
+            "model"
+            ,DFF_MODEL_FILE
+            ?enabled nil
+            ?section
+            ,DFF_PRE_SIMU_SECTION
+        )
+
+        (
+            "modelGroup"
+            ""
+        )
+    )
+)
+
+
+;==============================================================================
+; Checks and Asserts
+;==============================================================================
+
+ocnxlPutChecksAsserts(
+    ?netlist nil
+)
+
+
+;==============================================================================
+; Job Setup
+;==============================================================================
+
+ocnxlJobSetup(
+    '(
+        "autoresume" "0"
+        "blockemail" "1"
+        "configuretimeout" "300"
+        "defaultcpuvalue" "1"
+        "defaultmemoryvalue" "1000"
+        "distributionmethod" "Local"
+        "jobruntype" "ICRP"
+        "estimatememoryvalue" ""
+        "estimationsimulationmode" "0"
+        "lingertimeout" "300"
+        "maxjobs" "16"
+        "name" "Maestro Default"
+        "preemptivestart" "1"
+        "providecpuandmemorydata" "1"
+        "reconfigureimmediately" "1"
+        "runpointsvalue" "5"
+        "runtimeout" "-1"
+        "scaleestimatedbycpu" "100"
+        "scaleestimatedbymemory" "100"
+        "showerrorwhenretrying" "1"
+        "showoutputlogerror" "0"
+        "startmaxjobsimmed" "1"
+        "starttimeout" "300"
+        "usesameprocess" "1"
+        "warndisklow" "0"
+        "warnthresholdvalue" "100"
+    )
+)
+
+
+;==============================================================================
+; Disabled Items
+;==============================================================================
+
+; MONTE is enabled when the corner is created above.
+; Disable only the normal PVT corner for this Monte Carlo run.
+
+ocnxlDisableCorner(
+    "CORNER"
+)
+
+
+;==============================================================================
+; Monte Carlo Options
+;==============================================================================
+
+ocnxlMonteCarloOptions(
+    ?mcNumPoints DFF_MONTE_POINTS
+    ?mcYieldTarget "99.865"
+    ?mcNumBins ""
+    ?samplingMode "lds"
+    ?wcdMinYieldSigma "3.0"
+    ?dumpParamMode "yes"
+    ?mcYieldAlphaLimit "0.05"
+    ?reliabilitymode "singlestress"
+    ?mcStartingRunNumber "1"
+    ?mcSigmaTarget "3"
+    ?monteCarloSeed DFF_MONTE_SEED
+    ?sssNumPoints "7000"
+    ?highYieldExpectedYieldSigma "3"
+    ?mcMethod "all"
+    ?wcdInitialPoints "200"
+    ?wcdMaxIterations "10"
+    ?saveAllPlots "0"
+    ?highYieldUseHistoryMC "0"
+    ?saveProcess "1"
+    ?wcdAutoNumPoints "1"
+    ?mcStopEarly "0"
+    ?highYieldCreateCorners "0"
+    ?saveMismatch "1"
+    ?wcdSkipLowYieldSpecs "1"
+    ?wcdEnableVarReduction "1"
+)
+
+
+;==============================================================================
+; Run Monte Carlo
+;==============================================================================
+
+totalStartTime = getCurrentTime()
+simulationStartTime = getCurrentTime()
+
+ocnxlRun(
+    ?mode 'monteCarlo
+    ?nominalCornerEnabled nil
+    ?allCornersEnabled t
+    ?allSweepsEnabled t
+)
+
+simulationEndTime = getCurrentTime()
+
+simulationElapsedSec = compareTime(
+    simulationEndTime
+    simulationStartTime
+)
+
+
+;==============================================================================
+; Validate Maestro History
+;==============================================================================
+
+currentHistory =
+    ocnxlGetCurrentHistory()
+
+unless(
+    currentHistory
+
+    error(
+        "ERROR: Monte Carlo run did not create a Maestro history. "
+        "Restart Virtuoso and run this script from a clean session.\n"
+    )
+)
+
+
+;==============================================================================
+; Output Summary
+;==============================================================================
+
+ocnxlOutputSummary(
+    ?yieldSummary t
+    ?exprSummary nil
+    ?specSummary nil
+    ?detailed nil
+)
+
+
+;==============================================================================
+; Read Monte Carlo RDB
+;==============================================================================
+
+oceanPostStartTime = getCurrentTime()
+rdbReadStartTime = getCurrentTime()
+
+rdb =
+    axlReadHistoryResDB(
+        currentHistory
+        ?session ocnxlGetSession()
+    )
+
+rdbReadEndTime = getCurrentTime()
+
+rdbReadElapsedSec = compareTime(
+    rdbReadEndTime
+    rdbReadStartTime
+)
+
+
+;==============================================================================
+; Open OCEAN Log
+;==============================================================================
+
+oceanLog =
+    outfile(
+        DFF_MONTE_OCEAN_LOG
+    )
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+fprintf(
+    oceanLog
+    "OCEAN Monte Carlo Post Processing Start\n"
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+
+;==============================================================================
+; Make Monte Key
+;
+; Key:
+;   Sequence | Temperature | VDD
+;==============================================================================
+
+procedure(
+    makeMonteKey(
+        seqVal
+        tempVal
+        vddVal
+    )
+
+    sprintf(
+        nil
+        "%L|%L|%L"
+        seqVal
+        tempVal
+        vddVal
+    )
+)
+
+
+;==============================================================================
+; Setup / Hold Timing Calculation
+;
+; Input:
+;   dataList = ((SweepValue tCQ) ...)
+;
+; Output:
+;   Timing value at the configured CLK-to-Q degradation threshold.
+;==============================================================================
+
+procedure(
+    calcTimingFromSweepData(
+        dataList
+    )
+
+    let(
+        (
+            sortedData
+            nominalTcq
+            threshold
+            timingValue
+
+            prevX
+            prevY
+
+            x
+            y
+        )
+
+        nominalTcq =
+            nil
+
+        timingValue =
+            nil
+
+
+        ;----------------------------------------------------------------------
+        ; Process only when sweep data exists
+        ;----------------------------------------------------------------------
+
+        when(
+            dataList
+
+
+            ;------------------------------------------------------------------
+            ; Sort by sweep variable
+            ;------------------------------------------------------------------
+
+            sortedData =
+                sortcar(
+                    dataList
+                    'lessp
+                )
+
+
+            ;------------------------------------------------------------------
+            ; Find nominal CLK-to-Q
+            ;------------------------------------------------------------------
+
+            foreach(
+                item
+                sortedData
+
+                x =
+                    car(
+                        item
+                    )
+
+                y =
+                    cadr(
+                        item
+                    )
+
+                when(
+                    abs(
+                        x - DFF_TIMING_REFERENCE
+                    ) < 1e-15
+
+                    nominalTcq =
+                        y
+                )
+            )
+
+
+            ;------------------------------------------------------------------
+            ; Calculate degradation threshold
+            ;------------------------------------------------------------------
+
+            when(
+                nominalTcq
+
+                threshold =
+                    nominalTcq
+                    *
+                    DFF_TIMING_DEGRADATION
+
+
+                prevX =
+                    nil
+
+                prevY =
+                    nil
+
+
+                ;--------------------------------------------------------------
+                ; Find falling threshold crossing
+                ;--------------------------------------------------------------
+
+                foreach(
+                    item
+                    sortedData
+
+                    x =
+                        car(
+                            item
+                        )
+
+                    y =
+                        cadr(
+                            item
+                        )
+
+
+                    when(
+                        timingValue == nil
+                        &&
+                        prevY != nil
+                        &&
+                        prevY >= threshold
+                        &&
+                        y <= threshold
+
+
+                        if(
+                            y == prevY
+
+                            then
+
+                                timingValue =
+                                    x
+
+
+                            else
+
+                                timingValue =
+                                    prevX
+                                    +
+                                    (
+                                        threshold
+                                        -
+                                        prevY
+                                    )
+                                    *
+                                    (
+                                        x
+                                        -
+                                        prevX
+                                    )
+                                    /
+                                    (
+                                        y
+                                        -
+                                        prevY
+                                    )
+                        )
+                    )
+
+
+                    prevX =
+                        x
+
+                    prevY =
+                        y
+                )
+            )
+        )
+
+
+        ;----------------------------------------------------------------------
+        ; Return timing value
+        ;----------------------------------------------------------------------
+
+        timingValue
+    )
+)
+
+
+;==============================================================================
+; Read Cached ETC Metric
+;==============================================================================
+
+procedure(
+    getCachedEtcValue(
+        dataList
+        metricWanted
+    )
+
+    let(
+        (
+            result
+        )
+
+        result =
+            nil
+
+
+        foreach(
+            item
+            dataList
+
+            when(
+                car(
+                    item
+                )
+                ==
+                metricWanted
+
+                result =
+                    cadr(
+                        item
+                    )
+            )
+        )
+
+
+        result
+    )
+)
+
+
+;==============================================================================
+; Create Monte Carlo Data Tables
+;
+; Key:
+;   Sequence | Temperature | VDD
+;
+; setupDataTable[key]
+;   -> ((SetupSweepValue tCQ) ...)
+;
+; holdDataTable[key]
+;   -> ((HoldSweepValue tCQ) ...)
+;
+; etcDataTable[key]
+;   -> ((MetricName MetricValue) ...)
+;==============================================================================
+
+setupDataTable =
+    makeTable(
+        "setupDataTable"
+        nil
+    )
+
+
+holdDataTable =
+    makeTable(
+        "holdDataTable"
+        nil
+    )
+
+
+etcDataTable =
+    makeTable(
+        "etcDataTable"
+        nil
+    )
+
+
+;==============================================================================
+; Build One-Pass Monte Carlo Cache
+;
+; The complete RDB is traversed only once.
+;==============================================================================
+
+sequenceList =
+    nil
+
+tempList =
+    nil
+
+vddList =
+    nil
+
+etcMetricList =
+    nil
+
+
+pointCount =
+    0
+
+nextProgress =
+    100
+
+printf("\n")
+printf("============================================\n")
+printf(" Building Monte Carlo Data Cache\n")
+printf("============================================\n")
+
+cacheStartTime = getCurrentTime()
+
+foreach(
+    point
+    rdb->points()
+
+
+    pointCount =
+        pointCount
+        +
+        1
+
+
+    when(
+        pointCount >= nextProgress
+
+        printf(
+            " RDB points processed : %L\n"
+            pointCount
+        )
+
+        nextProgress =
+            nextProgress
+            +
+            100
+    )
+
+
+    foreach(
+        corner
+        point->corners()
+
+
+        seqVal =
+            nil
+
+        tempVal =
+            nil
+
+        vddVal =
+            nil
+
+        tsetupVal =
+            nil
+
+        tholdVal =
+            nil
+
+
+        ;----------------------------------------------------------------------
+        ; Read Point/Corner Parameters
+        ;----------------------------------------------------------------------
+
+        foreach(
+            param
+            corner->params()
+
+
+            when(
+                param->name
+                ==
+                "monteCarlo::param::sequence"
+
+                seqVal =
+                    param->value
+            )
+
+
+            when(
+                param->name
+                ==
+                "temperature"
+
+                tempVal =
+                    param->value
+            )
+
+
+            when(
+                param->name
+                ==
+                "VDD"
+
+                vddVal =
+                    param->value
+            )
+
+
+            when(
+                param->name
+                ==
+                DFF_SETUP_VARIABLE
+
+                tsetupVal =
+                    param->value
+            )
+
+
+            when(
+                param->name
+                ==
+                DFF_HOLD_VARIABLE
+
+                tholdVal =
+                    param->value
+            )
+        )
+
+
+        ;----------------------------------------------------------------------
+        ; Store only valid Monte Carlo points
+        ;----------------------------------------------------------------------
+
+        when(
+            seqVal != nil
+            &&
+            tempVal != nil
+            &&
+            vddVal != nil
+
+
+            key =
+                makeMonteKey(
+                    seqVal
+                    tempVal
+                    vddVal
+                )
+
+
+            ;------------------------------------------------------------------
+            ; Sequence List
+            ;------------------------------------------------------------------
+
+            unless(
+                member(
+                    seqVal
+                    sequenceList
+                )
+
+                sequenceList =
+                    cons(
+                        seqVal
+                        sequenceList
+                    )
+            )
+
+
+            ;------------------------------------------------------------------
+            ; Temperature List
+            ;------------------------------------------------------------------
+
+            unless(
+                member(
+                    tempVal
+                    tempList
+                )
+
+                tempList =
+                    cons(
+                        tempVal
+                        tempList
+                    )
+            )
+
+
+            ;------------------------------------------------------------------
+            ; VDD List
+            ;------------------------------------------------------------------
+
+            unless(
+                member(
+                    vddVal
+                    vddList
+                )
+
+                vddList =
+                    cons(
+                        vddVal
+                        vddList
+                    )
+            )
+
+
+            ;------------------------------------------------------------------
+            ; Read Test Outputs
+            ;------------------------------------------------------------------
+
+            foreach(
+                test
+                corner->tests()
+
+
+                ;==============================================================
+                ; Setup-Time Characterization
+                ;==============================================================
+
+                when(
+                    test->name
+                    ==
+                    DFF_SETUP_TEST_NAME
+
+
+                    foreach(
+                        output
+                        test->outputs()
+
+
+                        when(
+                            output->name
+                            ==
+                            DFF_CLK_TO_Q_OUTPUT
+
+
+                            tcqVal =
+                                output->value
+
+
+                            when(
+                                numberp(
+                                    tsetupVal
+                                )
+                                &&
+                                numberp(
+                                    tcqVal
+                                )
+
+
+                                setupDataTable[key] =
+                                    cons(
+                                        list(
+                                            tsetupVal
+                                            tcqVal
+                                        )
+
+                                        setupDataTable[key]
+                                    )
+                            )
+                        )
+                    )
+                )
+
+
+                ;==============================================================
+                ; Hold-Time Characterization
+                ;==============================================================
+
+                when(
+                    test->name
+                    ==
+                    DFF_HOLD_TEST_NAME
+
+
+                    foreach(
+                        output
+                        test->outputs()
+
+
+                        when(
+                            output->name
+                            ==
+                            DFF_CLK_TO_Q_OUTPUT
+
+
+                            tcqVal =
+                                output->value
+
+
+                            when(
+                                numberp(
+                                    tholdVal
+                                )
+                                &&
+                                numberp(
+                                    tcqVal
+                                )
+
+
+                                holdDataTable[key] =
+                                    cons(
+                                        list(
+                                            tholdVal
+                                            tcqVal
+                                        )
+
+                                        holdDataTable[key]
+                                    )
+                            )
+                        )
+                    )
+                )
+
+
+                ;==============================================================
+                ; User-Defined ETC Scalar Metrics
+                ;==============================================================
+
+                when(
+                    test->name
+                    ==
+                    DFF_ETC_TEST_NAME
+
+
+                    foreach(
+                        output
+                        test->outputs()
+
+
+                        when(
+                            output->type
+                            ==
+                            'expr
+                            &&
+                            output->name
+
+
+                            etcVal =
+                                output->value
+
+
+                            when(
+                                numberp(
+                                    etcVal
+                                )
+
+
+                                ;--------------------------------------------------
+                                ; Register Metric Name
+                                ;--------------------------------------------------
+
+                                unless(
+                                    member(
+                                        output->name
+                                        etcMetricList
+                                    )
+
+                                    etcMetricList =
+                                        cons(
+                                            output->name
+                                            etcMetricList
+                                        )
+                                )
+
+
+                                ;--------------------------------------------------
+                                ; Store Metric Value
+                                ;--------------------------------------------------
+
+                                etcDataTable[key] =
+                                    cons(
+                                        list(
+                                            output->name
+                                            etcVal
+                                        )
+
+                                        etcDataTable[key]
+                                    )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)
+
+cacheEndTime = getCurrentTime()
+
+cacheElapsedSec = compareTime(
+    cacheEndTime
+    cacheStartTime
+)
+
+
+;==============================================================================
+; Finalize Condition Lists
+;==============================================================================
+
+sequenceList =
+    reverse(
+        sequenceList
+    )
+
+tempList =
+    reverse(
+        tempList
+    )
+
+vddList =
+    reverse(
+        vddList
+    )
+
+etcMetricList =
+    reverse(
+        etcMetricList
+    )
+
+
+printf("\n")
+printf("============================================\n")
+printf(" Monte Carlo Data Cache Completed\n")
+printf("============================================\n")
+
+printf(
+    "RDB Point Count   = %L\n"
+    pointCount
+)
+
+printf(
+    "Sequence List     = %L\n"
+    sequenceList
+)
+
+printf(
+    "Temperature List  = %L\n"
+    tempList
+)
+
+printf(
+    "VDD List          = %L\n"
+    vddList
+)
+
+printf(
+    "ETC Metric List   = %L\n"
+    etcMetricList
+)
+
+printf(
+    "============================================\n\n"
+)
+
+
+fprintf(
+    oceanLog
+    "RDB Point Count   = %L\n"
+    pointCount
+)
+
+fprintf(
+    oceanLog
+    "Sequence List     = %L\n"
+    sequenceList
+)
+
+fprintf(
+    oceanLog
+    "Temperature List  = %L\n"
+    tempList
+)
+
+fprintf(
+    oceanLog
+    "VDD List          = %L\n"
+    vddList
+)
+
+fprintf(
+    oceanLog
+    "ETC Metric List   = %L\n"
+    etcMetricList
+)
+
+
+;==============================================================================
+; Monte Carlo CSV Export
+;==============================================================================
+
+csvExportStartTime = getCurrentTime()
+
+setupCsvPath =
+    DFF_MONTE_SETUP_CSV
+
+holdCsvPath =
+    DFF_MONTE_HOLD_CSV
+
+etcCsvPath =
+    DFF_MONTE_ETC_CSV
+
+
+setupCsv =
+    outfile(
+        setupCsvPath
+    )
+
+holdCsv =
+    outfile(
+        holdCsvPath
+    )
+
+etcCsv =
+    outfile(
+        etcCsvPath
+    )
+
+
+;==============================================================================
+; CSV Headers
+;==============================================================================
+
+fprintf(
+    setupCsv
+    "Run,Temperature,VDD,Setup_Time_ps\n"
+)
+
+fprintf(
+    holdCsv
+    "Run,Temperature,VDD,Hold_Time_ps\n"
+)
+
+
+;------------------------------------------------------------------------------
+; ETC Header
+;------------------------------------------------------------------------------
+
+fprintf(
+    etcCsv
+    "Run,Temperature,VDD"
+)
+
+foreach(
+    metricWanted
+    etcMetricList
+
+    fprintf(
+        etcCsv
+        ",%s"
+        metricWanted
+    )
+)
+
+fprintf(
+    etcCsv
+    "\n"
+)
+
+
+;==============================================================================
+; Export Results from Cache
+;
+; No additional full RDB traversal is performed below.
+;==============================================================================
+
+foreach(
+    seq
+    sequenceList
+
+
+    foreach(
+        tempVal
+        tempList
+
+
+        foreach(
+            vddVal
+            vddList
+
+
+            ;------------------------------------------------------------------
+            ; Build Cache Key
+            ;------------------------------------------------------------------
+
+            key =
+                makeMonteKey(
+                    seq
+                    tempVal
+                    vddVal
+                )
+
+
+            ;==================================================================
+            ; Setup Time
+            ;==================================================================
+
+            setupResult =
+                calcTimingFromSweepData(
+                    setupDataTable[key]
+                )
+
+
+            fprintf(
+                setupCsv
+                "%L,%L,%L,"
+                seq
+                tempVal
+                vddVal
+            )
+
+
+            if(
+                setupResult
+
+                then
+
+                    fprintf(
+                        setupCsv
+                        "%.6f\n"
+                        setupResult
+                        *
+                        1e12
+                    )
+
+                else
+
+                    fprintf(
+                        setupCsv
+                        "N/A\n"
+                    )
+            )
+
+
+            ;==================================================================
+            ; Hold Time
+            ;==================================================================
+
+            holdResult =
+                calcTimingFromSweepData(
+                    holdDataTable[key]
+                )
+
+
+            fprintf(
+                holdCsv
+                "%L,%L,%L,"
+                seq
+                tempVal
+                vddVal
+            )
+
+
+            if(
+                holdResult
+
+                then
+
+                    fprintf(
+                        holdCsv
+                        "%.6f\n"
+                        holdResult
+                        *
+                        1e12
+                    )
+
+                else
+
+                    fprintf(
+                        holdCsv
+                        "N/A\n"
+                    )
+            )
+
+
+            ;==================================================================
+            ; ETC Scalar Metrics
+            ;==================================================================
+
+            fprintf(
+                etcCsv
+                "%L,%L,%L"
+                seq
+                tempVal
+                vddVal
+            )
+
+
+            foreach(
+                metricWanted
+                etcMetricList
+
+
+                etcResult =
+                    getCachedEtcValue(
+                        etcDataTable[key]
+                        metricWanted
+                    )
+
+
+                if(
+                    numberp(
+                        etcResult
+                    )
+
+                    then
+
+                        fprintf(
+                            etcCsv
+                            ",%g"
+                            etcResult
+                        )
+
+                    else
+
+                        fprintf(
+                            etcCsv
+                            ",N/A"
+                        )
+                )
+            )
+
+
+            fprintf(
+                etcCsv
+                "\n"
+            )
+        )
+    )
+)
+
+
+;==============================================================================
+; Close CSV Files
+;==============================================================================
+
+close(
+    setupCsv
+)
+
+close(
+    holdCsv
+)
+
+close(
+    etcCsv
+)
+
+csvExportEndTime = getCurrentTime()
+
+csvExportElapsedSec = compareTime(
+    csvExportEndTime
+    csvExportStartTime
+)
+
+oceanPostEndTime = getCurrentTime()
+
+oceanPostElapsedSec = compareTime(
+    oceanPostEndTime
+    oceanPostStartTime
+)
+
+
+fprintf(
+    oceanLog
+    "\nSetup CSV Saved : %s\n"
+    setupCsvPath
+)
+
+fprintf(
+    oceanLog
+    "Hold CSV Saved  : %s\n"
+    holdCsvPath
+)
+
+fprintf(
+    oceanLog
+    "ETC CSV Saved   : %s\n"
+    etcCsvPath
+)
+
+
+printf("\n")
+printf("============================================\n")
+printf(" Monte Carlo CSV Export Completed\n")
+printf("============================================\n\n")
+
+
+;==============================================================================
+; Run Python Monte Carlo Summary
+;==============================================================================
+
+printf(
+    "Running Python Monte Summary...\n"
+)
+
+pythonStartTime = getCurrentTime()
+
+pythonCommand = sprintf(
+    nil
+    "python3 \"%s\" > \"%s\" 2>&1"
+    DFF_MONTE_PYTHON
+    DFF_MONTE_PYTHON_LOG
+)
+
+pythonStatus = system(
+    pythonCommand
+)
+
+pythonEndTime = getCurrentTime()
+
+pythonElapsedSec = compareTime(
+    pythonEndTime
+    pythonStartTime
+)
+
+totalEndTime = getCurrentTime()
+
+totalElapsedSec = compareTime(
+    totalEndTime
+    totalStartTime
+)
+
+
+;==============================================================================
+; Python Result
+;==============================================================================
+
+if(
+    pythonStatus == 0
+
+    then
+
+        pythonSuccess = t
+
+        fprintf(
+            oceanLog
+            "Python Monte Summary Completed\n"
+        )
+
+    else
+
+        pythonSuccess = nil
+
+        fprintf(
+            oceanLog
+            "Python Monte Summary FAILED : status=%L\n"
+            pythonStatus
+        )
+)
+
+
+;==============================================================================
+; Runtime Summary
+;==============================================================================
+
+fprintf(
+    oceanLog
+    "\n========================================================\n"
+)
+
+fprintf(
+    oceanLog
+    "Monte Carlo Runtime Summary\n"
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+fprintf(
+    oceanLog
+    "Simulation          : %L sec\n"
+    simulationElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "RDB Read            : %L sec\n"
+    rdbReadElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "One-Pass Cache Build: %L sec\n"
+    cacheElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "CSV Export          : %L sec\n"
+    csvExportElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "OCEAN Post Process  : %L sec\n"
+    oceanPostElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "Python Post Process : %L sec\n"
+    pythonElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "Total Flow          : %L sec\n"
+    totalElapsedSec
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+fprintf(
+    oceanLog
+    "OCEAN Monte Carlo Post Processing Completed\n"
+)
+
+fprintf(
+    oceanLog
+    "========================================================\n"
+)
+
+close(
+    oceanLog
+)
+
+
+;==============================================================================
+; Final CIW Message
+;==============================================================================
+
+printf("\n")
+printf("========================================================\n")
+
+if(
+    pythonSuccess
+
+    then
+
+        printf(
+            " Monte Carlo Simulation & Post Processing Completed\n"
+        )
+
+        printf(
+            "========================================================\n"
+        )
+
+        printf(
+            " Maestro History : %s\n"
+            currentHistory
+        )
+
+        printf(
+            " RAW CSV         : %s\n"
+            DFF_RAW_DIR
+        )
+
+        printf(
+            " RESULT          : %s\n"
+            DFF_MONTE_RESULT
+        )
+
+        printf(
+            " LOG             : %s\n"
+            DFF_LOG_DIR
+        )
+
+    else
+
+        printf(
+            " Monte Carlo Simulation Completed / Python Post Processing FAILED\n"
+        )
+
+        printf(
+            "========================================================\n"
+        )
+
+        printf(
+            " Maestro History : %s\n"
+            currentHistory
+        )
+
+        printf(
+            " RAW CSV         : %s\n"
+            DFF_RAW_DIR
+        )
+
+        printf(
+            " ERROR LOG       : %s\n"
+            DFF_MONTE_PYTHON_LOG
+        )
+)
+
+printf(
+    "========================================================\n"
+)
+
+printf(
+    " Runtime Summary\n"
+)
+
+printf(
+    "--------------------------------------------------------\n"
+)
+
+printf(
+    " Simulation          : %L sec\n"
+    simulationElapsedSec
+)
+
+printf(
+    " RDB Read            : %L sec\n"
+    rdbReadElapsedSec
+)
+
+printf(
+    " One-Pass Cache Build: %L sec\n"
+    cacheElapsedSec
+)
+
+printf(
+    " CSV Export          : %L sec\n"
+    csvExportElapsedSec
+)
+
+printf(
+    " OCEAN Post Process  : %L sec\n"
+    oceanPostElapsedSec
+)
+
+printf(
+    " Python Post Process : %L sec\n"
+    pythonElapsedSec
+)
+
+printf(
+    " Total Flow          : %L sec\n"
+    totalElapsedSec
+)
+
+printf(
+    "========================================================\n\n"
+)
+
+
+;==============================================================================
+; End XL Mode
+;==============================================================================
+
+ocnxlEndXLMode(
+    "assembler"
+)
+

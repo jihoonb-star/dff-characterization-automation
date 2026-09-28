@@ -1,0 +1,18 @@
+# User-specific configuration
+config/config.il
+
+# Generated raw characterization data
+data/raw/*.csv
+
+# Generated logs
+logs/*.log
+
+# Generated Excel reports
+results/*.xlsx
+
+# Cadence / editor temporary files
+*.log
+*.tmp
+*.bak
+*~
+.#*
