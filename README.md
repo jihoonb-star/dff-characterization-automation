@@ -63,6 +63,10 @@ The framework supports:
 
 ```text
 dff-characterization-automation/
+├── assets/
+│   ├── monte_characterization_summary.jpg
+│   └── pvt_setup_characterization.jpg
+│
 ├── benchmark/
 │   ├── benchmark_monte_postprocess.ocn
 │   └── benchmark_pvt_postprocess.ocn
@@ -562,6 +566,24 @@ Max
 ```
 
 The report is automatically generated after completion of the Monte Carlo OCEAN flow.
+
+---
+
+## Example Outputs
+
+The following screenshots use public-safe example data while preserving the structure and format of the generated characterization reports.
+
+### PVT Setup-Time Characterization
+
+The generated PVT report organizes setup-time results across process, voltage, and temperature conditions and automatically summarizes minimum, maximum, and mean values.
+
+![PVT Setup-Time Characterization](assets/pvt_setup_characterization.jpg)
+
+### Monte Carlo Characterization Summary
+
+The generated Monte Carlo report summarizes timing and scalar metrics using sample count, mean, 1-sigma, minimum, and maximum values.
+
+![Monte Carlo Characterization Summary](assets/monte_characterization_summary.jpg)
 
 ---
 
