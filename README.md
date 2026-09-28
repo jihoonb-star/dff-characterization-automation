@@ -91,6 +91,7 @@ dff-characterization-automation/
 ├── results/
 │
 ├── .gitignore
+├── LICENSE
 ├── setup.csh
 └── README.md
 ```
@@ -946,6 +947,16 @@ csh / tcsh
 A compatible Cadence environment and appropriate process model files are required.
 
 PDK files, proprietary model files, and proprietary Cadence simulation databases are not included in this repository.
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+The MIT License applies only to the source code and documentation contained in this repository.
+
+Proprietary EDA tools, PDKs, process model files, Cadence simulation databases, and other third-party intellectual property are not included in this repository and are not distributed under the MIT License.
 
 ---
 
